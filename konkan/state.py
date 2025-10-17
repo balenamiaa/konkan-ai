@@ -2,10 +2,28 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List, Sequence
+from dataclasses import dataclass, field
+from typing import List, Sequence, TYPE_CHECKING
 
 from ._compat import np
+
+
+if TYPE_CHECKING:  # pragma: no cover - typing helper
+    from numpy.typing import NDArray
+    from .rules import TurnPhase
+
+    UInt16Array = NDArray[np.uint16]
+else:  # pragma: no cover - runtime fallback when numpy is absent
+    UInt16Array = object
+    TurnPhase = object
+
+
+def _default_phase() -> "TurnPhase":
+    """Return the default turn phase for a fresh game state."""
+
+    from .rules import TurnPhase as _TurnPhase  # Local import to avoid cycles
+
+    return _TurnPhase.DRAW
 
 
 @dataclass(slots=True)
@@ -34,14 +52,15 @@ class KonkanState:
 
     player_to_act: int
     turn_index: int
-    deck: object
+    deck: UInt16Array
     deck_top: int
     trash: List[int]
-    hands: List[object]
+    hands: List[UInt16Array]
     table: List[MeldOnTable]
     public: List[PlayerPublic]
     highest_table_points: int
     first_player_has_discarded: bool
+    phase: "TurnPhase" = field(default_factory=_default_phase)
 
     def clone_shallow(self) -> "KonkanState":
         """Create a shallow copy of the state suitable for branching search."""
@@ -57,7 +76,15 @@ class KonkanState:
             public=[PlayerPublic(p.came_down, p.table_points) for p in self.public],
             highest_table_points=self.highest_table_points,
             first_player_has_discarded=self.first_player_has_discarded,
+            phase=self.phase,
         )
+
+    def register_discard(self, player_index: int) -> None:
+        """Update bookkeeping after a player discards a card."""
+
+        if player_index == 0 and not self.first_player_has_discarded:
+            self.first_player_has_discarded = True
+        self.phase = _default_phase()
 
 
 def hand_mask(hand: Sequence[int]) -> tuple[np.uint64, np.uint64]:
@@ -89,4 +116,5 @@ def new_game_state(num_players: int) -> KonkanState:
         public=public,
         highest_table_points=0,
         first_player_has_discarded=False,
+        phase=_default_phase(),
     )
