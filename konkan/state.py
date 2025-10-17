@@ -1,164 +1,92 @@
-"""State containers for the Konkan rules engine."""
+"""Core game state data structures for Konkan."""
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from enum import Enum
-from typing import Dict, Iterable, List, Sequence
+from dataclasses import dataclass
+from typing import List, Sequence
 
-from . import cards, encoding
-
-
-class TurnPhase(Enum):
-    AWAITING_DRAW = "awaiting_draw"
-    AWAITING_TRASH = "awaiting_trash"
-    COMPLETE = "complete"
+from ._compat import np
 
 
-@dataclass
-class KonkanConfig:
-    """High level configuration knobs for a Konkan deal."""
+@dataclass(slots=True)
+class MeldOnTable:
+    """Representation of a meld that is visible on the table."""
 
-    num_players: int = 2
-    hand_size: int = 13
-    come_down_points: int = 51
-    allow_trash_first_turn: bool = False
-    recycle_shuffle_seed: int | None = None
-    dealer_index: int = 0
-
-
-@dataclass
-class PlayerState:
-    """Mutable view of a single player's private information."""
-
-    hand_mask: encoding.Mask = field(default_factory=encoding.empty_mask)
-    laid_mask: encoding.Mask = field(default_factory=encoding.empty_mask)
-    melds: List[Sequence[int]] = field(default_factory=list)
-    has_come_down: bool = False
-    last_trash: encoding.CardId | None = None
-    phase: TurnPhase = TurnPhase.AWAITING_DRAW
-    pending_sarf: bool = False  # armed when a player draws a printed joker this turn
-
-    def card_count(self) -> int:
-        return encoding.popcount(self.hand_mask)
+    mask_hi: np.uint64
+    mask_lo: np.uint64
+    owner: int
+    has_joker: bool
+    points: int
+    is_four_set: bool
 
 
-@dataclass
-class PublicState:
-    """Shared table state visible to every participant."""
+@dataclass(slots=True)
+class PlayerPublic:
+    """Public information tracked for each player."""
 
-    draw_pile: List[int] = field(default_factory=list)
-    trash_pile: List[int] = field(default_factory=list)
-    turn_index: int = 0
-    dealer_index: int = 0
-    pending_recycle: bool = False
-    winner_index: int | None = None
-
-    def top_trash(self) -> int | None:
-        if not self.trash_pile:
-            return None
-        return self.trash_pile[-1]
+    came_down: bool
+    table_points: int
 
 
-@dataclass
+@dataclass(slots=True)
 class KonkanState:
-    config: KonkanConfig
-    players: List[PlayerState]
-    public: PublicState
+    """Mutable game state used throughout determinization and search."""
 
-    def active_player(self) -> PlayerState:
-        return self.players[self.public.turn_index]
+    player_to_act: int
+    turn_index: int
+    deck: object
+    deck_top: int
+    trash: List[int]
+    hands: List[object]
+    table: List[MeldOnTable]
+    public: List[PlayerPublic]
+    highest_table_points: int
+    first_player_has_discarded: bool
 
-    def player_view(self, index: int) -> PlayerState:
-        return self.players[index]
+    def clone_shallow(self) -> "KonkanState":
+        """Create a shallow copy of the state suitable for branching search."""
+
+        return KonkanState(
+            player_to_act=self.player_to_act,
+            turn_index=self.turn_index,
+            deck=self.deck.copy(),
+            deck_top=self.deck_top,
+            trash=list(self.trash),
+            hands=[hand.copy() for hand in self.hands],
+            table=list(self.table),
+            public=[PlayerPublic(p.came_down, p.table_points) for p in self.public],
+            highest_table_points=self.highest_table_points,
+            first_player_has_discarded=self.first_player_has_discarded,
+        )
 
 
-# Factory helpers -----------------------------------------------------------
+def hand_mask(hand: Sequence[int]) -> tuple[np.uint64, np.uint64]:
+    """Compute the (hi, lo) bitset mask for a player's hand."""
 
-def deal_new_game(config: KonkanConfig, deck: List[int]) -> KonkanState:
-    if len(deck) < config.num_players * config.hand_size:
-        raise ValueError("deck too small for requested configuration")
-    players = [PlayerState() for _ in range(config.num_players)]
-    draw_pile = deck.copy()
+    mask_hi = np.uint64(0)
+    mask_lo = np.uint64(0)
+    for card_identifier in hand:
+        if card_identifier < 64:
+            mask_lo |= np.uint64(1) << np.uint64(card_identifier)
+        else:
+            mask_hi |= np.uint64(1) << np.uint64(card_identifier - 64)
+    return mask_hi, mask_lo
 
-    for round_index in range(config.hand_size):
-        for player_index in range(config.num_players):
-            card_id = draw_pile.pop()
-            player = players[player_index]
-            player.hand_mask = encoding.add_card(player.hand_mask, card_id)
 
-    trash_pile: List[int] = [draw_pile.pop()]
-    dealer = config.dealer_index % config.num_players
-    public = PublicState(
-        draw_pile=draw_pile,
-        trash_pile=trash_pile,
-        turn_index=(dealer + 1) % config.num_players,
-        dealer_index=dealer,
+def new_game_state(num_players: int) -> KonkanState:
+    """Return an empty shell game state with the requested player count."""
+
+    hands = [np.zeros(0, dtype=np.uint16) for _ in range(num_players)]
+    public = [PlayerPublic(False, 0) for _ in range(num_players)]
+    return KonkanState(
+        player_to_act=0,
+        turn_index=0,
+        deck=np.zeros(0, dtype=np.uint16),
+        deck_top=0,
+        trash=[],
+        hands=hands,
+        table=[],
+        public=public,
+        highest_table_points=0,
+        first_player_has_discarded=False,
     )
-    for index, player in enumerate(players):
-        player.phase = TurnPhase.AWAITING_DRAW if index == public.turn_index else TurnPhase.COMPLETE
-    return KonkanState(config=config, players=players, public=public)
-
-
-def serialize_state(state: KonkanState) -> Dict[str, object]:
-    return {
-        "config": asdict(state.config),
-        "players": [
-            {
-                "hand_mask": player.hand_mask,
-                "laid_mask": player.laid_mask,
-                "melds": [list(meld) for meld in player.melds],
-                "has_come_down": player.has_come_down,
-                "last_trash": player.last_trash,
-                "phase": player.phase.value,
-                "pending_sarf": player.pending_sarf,
-            }
-            for player in state.players
-        ],
-        "public": {
-            "draw_pile": list(state.public.draw_pile),
-            "trash_pile": list(state.public.trash_pile),
-            "turn_index": state.public.turn_index,
-            "dealer_index": state.public.dealer_index,
-            "pending_recycle": state.public.pending_recycle,
-            "winner_index": state.public.winner_index,
-        },
-    }
-
-
-def deserialize_state(payload: Dict[str, object]) -> KonkanState:
-    config_payload = payload["config"]
-    config = KonkanConfig(**config_payload)  # type: ignore[arg-type]
-    players_payload = payload["players"]
-    players: List[PlayerState] = []
-    for entry in players_payload:
-        player = PlayerState()
-        player.hand_mask = entry["hand_mask"]
-        player.laid_mask = entry["laid_mask"]
-        player.melds = [tuple(meld) for meld in entry["melds"]]
-        player.has_come_down = entry["has_come_down"]
-        player.last_trash = entry["last_trash"]
-        player.phase = TurnPhase(entry["phase"])
-        player.pending_sarf = entry["pending_sarf"]
-        players.append(player)
-
-    public_payload = payload["public"]
-    public = PublicState(
-        draw_pile=list(public_payload["draw_pile"]),
-        trash_pile=list(public_payload["trash_pile"]),
-        turn_index=public_payload["turn_index"],
-        dealer_index=public_payload["dealer_index"],
-        pending_recycle=public_payload["pending_recycle"],
-        winner_index=public_payload["winner_index"],
-    )
-    return KonkanState(config=config, players=players, public=public)
-
-
-def ensure_player_has_cards(player: PlayerState, cards_to_remove: Iterable[int]) -> None:
-    for card_id in cards_to_remove:
-        if not encoding.has_card(player.hand_mask, card_id):
-            raise ValueError(f"player missing card {cards.Card(card_id).code}")
-
-
-def ensure_phase(player: PlayerState, expected: TurnPhase) -> None:
-    if player.phase is not expected:
-        raise RuntimeError(f"player is in phase {player.phase.value}, expected {expected.value}")

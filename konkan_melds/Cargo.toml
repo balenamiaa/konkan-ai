@@ -1,0 +1,19 @@
+[package]
+name = "konkan_melds"
+version = "0.1.0"
+edition = "2021"
+description = "Rust meld solver for Konkan"
+authors = ["Konkan AI"]
+license = "MIT"
+
+[lib]
+name = "konkan_melds"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+rand = "0.8"
+
+[profile.release]
+lto = true
+codegen-units = 1
