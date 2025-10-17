@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+target/
+*.egg-info/
+.maturin/
+.idea/
+.DS_Store
