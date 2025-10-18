@@ -71,13 +71,17 @@ def run_search(state: KonkanState, rng: object, config: SearchConfig) -> Node:
     for _ in range(max(1, config.simulations)):
         action_index = _select_action(node, config.exploration_constant)
         action_card = actions[action_index]
-        simulated_root = sample_world(state, rng)
+        simulated_root = sample_world(state, rng, actor_index=player_index)
         sim_state = simulated_root.clone_shallow()
         try:
             rules.trash_card(sim_state, player_index, action_card)
         except rules.IllegalTrash:
             value = -1.0
         else:
+            public_sim = sim_state.public
+            if isinstance(public_sim, PublicState):
+                next_actor = public_sim.current_player_index
+                sim_state = sample_world(sim_state, rng, actor_index=next_actor)
             value = rollout.simulate(sim_state, player_index)
 
         node.visits[action_index] += 1

@@ -84,4 +84,28 @@ class StateSummaryView:
             table.add_row(name, role, hand_display, laid_display, status_text, phase_text)
 
         meta = self._metadata_panel(public, threshold)
-        return Group(table, meta)
+
+        components: list[RenderableType] = [table, meta]
+
+        if self.state.table:
+            meld_table = Table(box=box.MINIMAL, expand=True)
+            meld_table.add_column("Meld", justify="left", style="bold")
+            meld_table.add_column("Owner", justify="left")
+            meld_table.add_column("Kind", justify="left")
+            meld_table.add_column("Cards", justify="left")
+            meld_table.add_column("Notes", justify="left")
+
+            for idx, meld in enumerate(self.state.table):
+                owner = f"P{meld.owner}"
+                kind_label = "Set" if meld.kind == 0 else "Run"
+                cards_display = " ".join(self.card_formatter(card) for card in meld.cards)
+                notes = []
+                if meld.has_joker:
+                    notes.append("Joker")
+                if meld.is_four_set:
+                    notes.append("Sealed")
+                meld_table.add_row(f"M{idx}", owner, kind_label, cards_display, ", ".join(notes))
+
+            components.append(Panel(meld_table, title="Table Melds", box=box.SQUARE, border_style="green"))
+
+        return Group(*components)

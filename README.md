@@ -45,10 +45,30 @@ uv run konkan-test
 Fire up the CLI for a quick match against AI opponents:
 
 ```bash
-uv run konkan-play --players 3 --humans 1 --simulations 256
+uv run konkan-play --players 3 --humans 1 --simulations 256 --rounds 5
 ```
 
-The command supports two or three seats, with any number of humans from zero to the player count. During your turn the CLI renders the full table, prompts for draw and discard decisions, and lets you lay down melds once you satisfy the coming-down threshold.
+The command supports two or three seats, with any number of humans from zero to the player count. During your turn the CLI renders the full table, prompts for draw and discard decisions, and lets you lay down melds once you satisfy the coming-down threshold. Multi-round sessions (`--rounds`) track laid meld points, deadwood penalties, round winners, and aggregate match totals; Rich tables appear after every round and again at the end of the match.
+
+### Head-to-head benchmarks
+
+Automated head-to-head runs help compare different IS-MCTS settings. Drop into a Python shell and call the benchmark harness:
+
+```python
+from konkan.benchmark import run_head_to_head
+from konkan.ismcts.search import SearchConfig
+
+report = run_head_to_head(
+    rounds=10,
+    baseline=SearchConfig(simulations=64),
+    challenger=SearchConfig(simulations=256),
+    seed=42,
+)
+
+print(report.baseline, report.challenger)
+```
+
+Each report bundles the per-round history alongside aggregated wins, laid points, deadwood, and net totals for the two agents.
 
 ## The Rules of Konkan
 

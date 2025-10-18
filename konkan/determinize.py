@@ -18,8 +18,12 @@ class DeterminizationConfig:
     max_samples: int = 1
 
 
-def sample_world(state: KonkanState, rng: Any) -> KonkanState:
-    """Return a determinized world by shuffling hidden zones."""
+def sample_world(state: KonkanState, rng: Any, *, actor_index: int | None = None) -> KonkanState:
+    """Return a determinized world by shuffling hidden zones.
+
+    When ``actor_index`` is provided, the returned state preserves that player's
+    hand while reassigning all hidden zones from the perspective of the actor.
+    """
 
     shuffled = state.clone_shallow()
     public = shuffled.public
@@ -37,7 +41,8 @@ def sample_world(state: KonkanState, rng: Any) -> KonkanState:
 
         shuffle_fn = _shuffle
 
-    actor_index = public.current_player_index
+    if actor_index is None:
+        actor_index = public.current_player_index
     available_cards: list[int] = []
 
     for idx, player in enumerate(shuffled.players):

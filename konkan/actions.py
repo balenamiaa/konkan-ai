@@ -24,8 +24,7 @@ class PlayAction:
 
     discard: int
     lay_down: bool = False
-    sarf: bool = False
-    target_meld: int | None = None
+    sarf_moves: tuple[tuple[int, int], ...] = ()
 
 
 def legal_draw_actions(state: KonkanState, player_index: int) -> list[DrawAction]:
@@ -100,6 +99,32 @@ def legal_play_actions(
     if rules.can_player_come_down(state, player_index):
         actions.extend(PlayAction(discard=card_id, lay_down=True) for card_id in ranked_cards)
 
+    player = state.players[player_index]
+    if player.has_come_down and state.table:
+        sarf_candidates: set[tuple[int, int, int]] = set()
+        for meld_index, _meld in enumerate(state.table):
+            for card_id in candidate_cards:
+                if rules.can_sarf_card(state, player_index, meld_index, card_id):
+                    remaining = [card for card in candidate_cards if card != card_id]
+                    if not remaining:
+                        continue
+                    ranked_remaining = _rank_discard_candidates(remaining)
+                    discard_card = ranked_remaining[0] if ranked_remaining else remaining[0]
+                    key = (meld_index, card_id, discard_card)
+                    if key in sarf_candidates:
+                        continue
+                    sarf_candidates.add(key)
+                    actions.append(
+                        PlayAction(
+                            discard=discard_card,
+                            sarf_moves=((meld_index, card_id),),
+                        )
+                    )
+                    if len(sarf_candidates) >= max_discards:
+                        break
+            if len(actions) >= max_discards * 2:
+                break
+
     return actions
 
 
@@ -119,7 +144,6 @@ def apply_play_action(state: KonkanState, player_index: int, action: PlayAction)
 
     if action.lay_down:
         rules.lay_down(state, player_index)
-    if action.sarf and action.target_meld is not None:
-        rules.sarf_card(state, player_index, action.target_meld, action.discard)
-        return
+    for target_index, card_id in action.sarf_moves:
+        rules.sarf_card(state, player_index, target_index, card_id)
     rules.trash_card(state, player_index, action.discard)

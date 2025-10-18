@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, List, Sequence
+from typing import TYPE_CHECKING, Iterable, List, Sequence
 
 from . import encoding
 from ._compat import np
@@ -14,7 +14,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing helper
 
     from .rules import TurnPhase as RulesTurnPhase
 
-    UInt16Array = NDArray[Any]
+    UInt16Array = NDArray[np.uint16]
 else:  # pragma: no cover - runtime fallback when numpy is absent
     UInt16Array = object
     RulesTurnPhase = object
@@ -27,10 +27,6 @@ class TurnPhase(str, Enum):
     AWAITING_TRASH = "awaiting_trash"
     COMPLETE = "complete"
 
-    UInt16Array = NDArray[np.uint16]
-else:  # pragma: no cover - runtime fallback when numpy is absent
-    UInt16Array = object
-    TurnPhase = object
 
 @dataclass(slots=True)
 class KonkanConfig:
@@ -43,14 +39,13 @@ class KonkanConfig:
     dealer_index: int = 0
     first_player_hand_size: int | None = None
 
-    from .rules import TurnPhase as _TurnPhase  # Local import to avoid cycles
-
 @dataclass(slots=True)
 class PlayerState:
     """State tracked for each player at the table."""
 
     hand_mask: int = 0
     laid_mask: int = 0
+    laid_points: int = 0
     has_come_down: bool = False
     phase: TurnPhase = TurnPhase.AWAITING_DRAW
     last_action_was_trash: bool = False
@@ -61,17 +56,11 @@ class PlayerState:
         return PlayerState(
             hand_mask=self.hand_mask,
             laid_mask=self.laid_mask,
+            laid_points=self.laid_points,
             has_come_down=self.has_come_down,
             phase=self.phase,
             last_action_was_trash=self.last_action_was_trash,
         )
-
-    mask_hi: np.uint64
-    mask_lo: np.uint64
-    owner: int
-    has_joker: bool
-    points: int
-    is_four_set: bool
 
 @dataclass(slots=True)
 class PublicState:
@@ -115,7 +104,9 @@ class MeldOnTable:
 
     mask_hi: int
     mask_lo: int
+    cards: List[int]
     owner: int
+    kind: int
     has_joker: bool
     points: int
     is_four_set: bool
@@ -158,7 +149,19 @@ class KonkanState:
             deck_top=self.deck_top,
             trash=list(self.trash),
             hands=[hand.copy() for hand in self.hands],
-            table=list(self.table),
+            table=[
+                MeldOnTable(
+                    mask_hi=meld.mask_hi,
+                    mask_lo=meld.mask_lo,
+                    cards=list(meld.cards),
+                    owner=meld.owner,
+                    kind=meld.kind,
+                    has_joker=meld.has_joker,
+                    points=meld.points,
+                    is_four_set=meld.is_four_set,
+                )
+                for meld in self.table
+            ],
             public=public_copy,
             highest_table_points=self.highest_table_points,
             first_player_has_discarded=self.first_player_has_discarded,

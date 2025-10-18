@@ -70,7 +70,7 @@ def test_final_scores_reflect_deadwood() -> None:
         current_player_index=0,
         winner_index=0,
     )
-    winner_hand = encoding.mask_from_cards([encoding.encode_standard_card(0, 0, 0)])
+    winner_hand = 0
     loser_hand = encoding.mask_from_cards([encoding.encode_standard_card(1, 10, 0)])
     players = [state.PlayerState(hand_mask=winner_hand), state.PlayerState(hand_mask=loser_hand)]
     game_state = state.KonkanState(
@@ -90,7 +90,14 @@ def test_final_scores_reflect_deadwood() -> None:
     )
 
     scores = rules.final_scores(game_state)
-    assert scores == [0, 10]
+    assert scores[0].won_round
+    assert not scores[1].won_round
+    assert scores[0].deadwood_points == 0
+    assert scores[1].deadwood_points == 10
+    assert scores[0].laid_points == 0
+    assert scores[1].laid_points == 0
+    assert scores[0].net_points == 0
+    assert scores[1].net_points == -10
 
 
 def test_final_scores_requires_winner() -> None:

@@ -135,6 +135,37 @@ def test_legal_play_actions_include_lay_down_option() -> None:
     assert laydown_flags == {False, True}
 
 
+def test_legal_play_actions_include_sarf_option() -> None:
+    cards = [
+        encoding.encode_standard_card(0, 3, 0),
+        encoding.encode_standard_card(0, 4, 0),
+        encoding.encode_standard_card(1, 10, 0),
+    ]
+    game_state = _make_state_for_discard(cards, came_down=True)
+    run_cards = [
+        encoding.encode_standard_card(0, 0, 0),
+        encoding.encode_standard_card(0, 1, 0),
+        encoding.encode_standard_card(0, 2, 0),
+    ]
+    mask = encoding.mask_from_cards(run_cards)
+    mask_hi, mask_lo = encoding.split_mask(mask)
+    game_state.table.append(
+        state.MeldOnTable(
+            mask_hi=mask_hi,
+            mask_lo=mask_lo,
+            cards=list(run_cards),
+            owner=1,
+            kind=1,
+            has_joker=False,
+            points=encoding.points_from_mask(mask),
+            is_four_set=False,
+        )
+    )
+
+    play_actions = actions.legal_play_actions(game_state, 0, max_discards=3)
+    assert any(action.sarf_moves for action in play_actions)
+
+
 def test_apply_draw_action_executes_rules(monkeypatch: pytest.MonkeyPatch) -> None:
     game_state = _make_state_for_draw([encoding.encode_standard_card(0, 0, 0)], [])
     draw_action = actions.DrawAction(source="deck")
