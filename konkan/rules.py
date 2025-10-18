@@ -43,6 +43,9 @@ class TurnPhase(str, Enum):
     PLAY = "play"
     DISCARD = "discard"
 
+@dataclass(frozen=True, slots=True)
+class Thresholds:
+    """Threshold values that regulate coming down to the table."""
 
 @dataclass(frozen=True, slots=True)
 class Thresholds:
@@ -70,6 +73,8 @@ class DealPattern:
 
         return self.first_player_cards if player_index == 0 else self.other_player_cards
 
+DEFAULT_THRESHOLDS: Final[Thresholds] = Thresholds()
+DEFAULT_DEAL_PATTERN: Final[DealPattern] = DealPattern()
 
 DEFAULT_THRESHOLDS: Final[Thresholds] = Thresholds()
 DEFAULT_DEAL_PATTERN: Final[DealPattern] = DealPattern()

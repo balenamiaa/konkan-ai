@@ -27,6 +27,10 @@ class TurnPhase(str, Enum):
     AWAITING_TRASH = "awaiting_trash"
     COMPLETE = "complete"
 
+    UInt16Array = NDArray[np.uint16]
+else:  # pragma: no cover - runtime fallback when numpy is absent
+    UInt16Array = object
+    TurnPhase = object
 
 @dataclass(slots=True)
 class KonkanConfig:
@@ -39,6 +43,7 @@ class KonkanConfig:
     dealer_index: int = 0
     first_player_hand_size: int | None = None
 
+    from .rules import TurnPhase as _TurnPhase  # Local import to avoid cycles
 
 @dataclass(slots=True)
 class PlayerState:
@@ -61,6 +66,12 @@ class PlayerState:
             last_action_was_trash=self.last_action_was_trash,
         )
 
+    mask_hi: np.uint64
+    mask_lo: np.uint64
+    owner: int
+    has_joker: bool
+    points: int
+    is_four_set: bool
 
 @dataclass(slots=True)
 class PublicState:
