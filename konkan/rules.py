@@ -461,7 +461,7 @@ def sarf_card(
             if cid not in encoding.JOKER_IDS
         }
         if decoded.suit_idx in existing_suits:
-        raise RuntimeError("duplicate suit not allowed in set")
+            raise RuntimeError("duplicate suit not allowed in set")
 
     if decoded.is_joker:
         raise RuntimeError("cannot sarf joker without swap target")
