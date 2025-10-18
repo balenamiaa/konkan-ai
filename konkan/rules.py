@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Callable, Final, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Sequence, cast
 
-from ._compat import np
-from . import melds
+from . import encoding, melds
+
+SET_KIND = 0
+RUN_KIND = 1
 
 if TYPE_CHECKING:
-    from .state import KonkanState, PlayerPublic
+    from .state import KonkanConfig, KonkanState, PlayerPublic, PlayerState, PublicState
 
 __all__ = [
     "TurnPhase",
@@ -18,11 +20,19 @@ __all__ = [
     "DealPattern",
     "DEFAULT_THRESHOLDS",
     "DEFAULT_DEAL_PATTERN",
+    "IllegalDraw",
+    "IllegalTrash",
+    "LayDownResult",
     "effective_threshold",
     "someone_is_down",
     "can_draw_from_trash",
     "requires_opening_discard",
     "can_finish_via_sarf",
+    "can_player_come_down",
+    "lay_down",
+    "draw_from_stock",
+    "draw_from_trash",
+    "trash_card",
 ]
 
 
@@ -33,6 +43,9 @@ class TurnPhase(str, Enum):
     PLAY = "play"
     DISCARD = "discard"
 
+@dataclass(frozen=True, slots=True)
+class Thresholds:
+    """Threshold values that regulate coming down to the table."""
 
 @dataclass(frozen=True, slots=True)
 class Thresholds:
@@ -60,9 +73,27 @@ class DealPattern:
 
         return self.first_player_cards if player_index == 0 else self.other_player_cards
 
+DEFAULT_THRESHOLDS: Final[Thresholds] = Thresholds()
+DEFAULT_DEAL_PATTERN: Final[DealPattern] = DealPattern()
 
 DEFAULT_THRESHOLDS: Final[Thresholds] = Thresholds()
 DEFAULT_DEAL_PATTERN: Final[DealPattern] = DealPattern()
+
+
+class IllegalDraw(RuntimeError):
+    """Raised when a player attempts to draw illegally."""
+
+
+class IllegalTrash(RuntimeError):
+    """Raised when a player attempts to trash illegally."""
+
+
+@dataclass(slots=True)
+class LayDownResult:
+    """Result structure returned after a successful lay-down."""
+
+    used_mask: int
+    deadwood_mask: int
 
 
 def someone_is_down(public: Sequence["PlayerPublic"]) -> bool:
@@ -83,25 +114,27 @@ def effective_threshold(
     return thresholds.base
 
 
-def _mask_with_card(mask_hi: np.uint64, mask_lo: np.uint64, card_identifier: int) -> tuple[int, int]:
+def _mask_with_card(mask_hi: int, mask_lo: int, card_identifier: int) -> tuple[int, int]:
     """Return masks updated to include ``card_identifier``."""
 
     if card_identifier < 64:
-        mask_lo |= np.uint64(1) << np.uint64(card_identifier)
+        mask_lo |= 1 << card_identifier
     else:
-        mask_hi |= np.uint64(1) << np.uint64(card_identifier - 64)
-    return int(mask_hi), int(mask_lo)
+        mask_hi |= 1 << (card_identifier - 64)
+    return mask_hi, mask_lo
 
 
-def can_draw_from_trash(
+def _can_draw_from_trash_kwargs(
     *,
     trash: Sequence[int],
-    hand_mask: tuple[np.uint64, np.uint64],
+    hand_mask: tuple[int, int],
     player_public: "PlayerPublic",
     public_state: Sequence["PlayerPublic"],
     highest_table_points: int,
     thresholds: Thresholds = DEFAULT_THRESHOLDS,
-    cover_to_threshold: Callable[[int, int, int], melds.CoverResultProtocol] = melds.best_cover_to_threshold,
+    cover_to_threshold: Callable[
+        [int, int, int], melds.CoverResultProtocol
+    ] = melds.best_cover_to_threshold,
 ) -> bool:
     """Determine whether the player may take the top trash card this turn."""
 
@@ -132,3 +165,313 @@ def can_finish_via_sarf(hand_card_count: int, player_public: "PlayerPublic") -> 
     """Return whether the player may legally finish the round via sarf-only play."""
 
     return player_public.came_down and hand_card_count <= 2
+
+
+def _resolve_runtime_components(
+    state: "KonkanState",
+) -> tuple["KonkanConfig", Sequence["PlayerState"], "PublicState"]:
+    """Return configuration, players, and public state for high-level helpers."""
+
+    from . import state as state_module
+
+    config = state.config
+    if config is None:
+        raise ValueError("KonkanState is missing configuration; use deal_new_game")
+    if not state.players:
+        raise ValueError("KonkanState is missing player data")
+    public = state.public
+    if not isinstance(public, state_module.PublicState):
+        raise ValueError("KonkanState public state is not initialised for high-level play")
+    if config.num_players != len(state.players):
+        raise ValueError("configuration player count does not match player state list")
+    return config, state.players, public
+
+
+def can_draw_from_trash(*args, **kwargs) -> bool:
+    """Determine whether a trash draw is legal.
+
+    Maintains backwards compatibility with the keyword-oriented helper used in
+    lower-level tests while also supporting the high-level ``KonkanState`` form.
+    """
+
+    if not args:
+        return _can_draw_from_trash_kwargs(**kwargs)
+    if len(args) != 2 or kwargs:
+        raise TypeError("expected state and player index arguments")
+
+    state, player_index = args
+    from . import state as state_module
+
+    if not isinstance(state, state_module.KonkanState):
+        raise TypeError("first argument must be a KonkanState instance")
+
+    try:
+        config, players, public = _resolve_runtime_components(state)
+    except ValueError:
+        return False
+
+    if player_index < 0 or player_index >= len(players):
+        return False
+    if public.winner_index is not None:
+        return False
+    if public.current_player_index != player_index:
+        return False
+
+    player = players[player_index]
+    if player.phase != state_module.TurnPhase.AWAITING_DRAW:
+        return False
+    if public.last_trash_by == player_index:
+        return False
+    if not public.trash_pile:
+        return False
+    if not config.allow_trash_first_turn and public.turn_index == 0 and not player.has_come_down:
+        return False
+    if player.has_come_down:
+        return True
+
+    prospective_mask = encoding.add_card(player.hand_mask, public.trash_pile[-1])
+    threshold = config.come_down_points
+    if public.highest_table_points > 0:
+        threshold = max(threshold, public.highest_table_points + 1)
+    mask_hi, mask_lo = encoding.split_mask(prospective_mask)
+    cover = melds.best_cover_to_threshold(mask_hi, mask_lo, threshold)
+    return cover.total_points >= threshold
+
+
+def can_player_come_down(state: "KonkanState", player_index: int) -> bool:
+    """Return ``True`` when the player satisfies the coming-down threshold."""
+
+    try:
+        config, players, public = _resolve_runtime_components(state)
+    except ValueError:
+        return False
+
+    if player_index < 0 or player_index >= len(players):
+        return False
+
+    player = players[player_index]
+    if player.has_come_down:
+        return False
+
+    threshold = config.come_down_points
+    if public.highest_table_points > 0:
+        threshold = max(threshold, public.highest_table_points + 1)
+    mask_hi, mask_lo = encoding.split_mask(player.hand_mask)
+    cover = melds.best_cover_to_threshold(mask_hi, mask_lo, threshold)
+    if cover.total_points >= threshold:
+        return True
+    return encoding.points_from_mask(player.hand_mask) >= threshold
+
+
+def lay_down(state: "KonkanState", player_index: int) -> LayDownResult:
+    """Mark the player as having come down and return the lay-down summary."""
+
+    try:
+        config, players, public = _resolve_runtime_components(state)
+    except ValueError as exc:
+        raise RuntimeError("cannot lay down without initialised table state") from exc
+
+    if not can_player_come_down(state, player_index):
+        raise RuntimeError("player does not meet the coming-down threshold")
+
+    player = players[player_index]
+    threshold = config.come_down_points
+    if public.highest_table_points > 0:
+        threshold = max(threshold, public.highest_table_points + 1)
+
+    mask_hi, mask_lo = encoding.split_mask(player.hand_mask)
+    cover = melds.best_cover_to_threshold(mask_hi, mask_lo, threshold)
+    total_points = cover.total_points
+    used_mask_int = 0
+    if total_points >= threshold:
+        for meld in cast(Iterable[Any], cover.melds):
+            mask_hi = int(getattr(meld, "mask_hi", 0))
+            mask_lo = int(getattr(meld, "mask_lo", 0))
+            used_mask_int |= (mask_hi << 64) | mask_lo
+    else:
+        fallback_points = encoding.points_from_mask(player.hand_mask)
+        if fallback_points < threshold:
+            raise RuntimeError("player does not meet the coming-down threshold")
+        used_mask_int = player.hand_mask
+        total_points = fallback_points
+
+    deadwood_mask = player.hand_mask & ~used_mask_int
+
+    player.has_come_down = True
+    player.laid_mask |= used_mask_int
+    player.hand_mask = deadwood_mask
+
+    laid_points = encoding.points_from_mask(player.laid_mask)
+    public.highest_table_points = max(public.highest_table_points, laid_points)
+
+    return LayDownResult(used_mask=used_mask_int, deadwood_mask=deadwood_mask)
+
+
+def draw_from_stock(state: "KonkanState", player_index: int) -> int:
+    """Draw the next card from the stock (draw pile) for ``player_index``."""
+
+    from . import state as state_module
+
+    _, players, public = _resolve_runtime_components(state)
+    if player_index < 0 or player_index >= len(players):
+        raise IllegalDraw("invalid player index")
+    if public.winner_index is not None:
+        raise IllegalDraw("round already finished")
+    if public.current_player_index != player_index:
+        raise IllegalDraw("not this player's turn")
+
+    player = players[player_index]
+    if player.phase != state_module.TurnPhase.AWAITING_DRAW:
+        raise IllegalDraw("player must be awaiting a draw")
+    if not public.draw_pile:
+        raise IllegalDraw("draw pile is empty")
+
+    card_identifier = public.draw_pile.pop()
+    player.hand_mask = encoding.add_card(player.hand_mask, card_identifier)
+    player.phase = state_module.TurnPhase.AWAITING_TRASH
+    player.last_action_was_trash = False
+    return card_identifier
+
+
+def draw_from_trash(state: "KonkanState", player_index: int) -> int:
+    """Draw the top trash card for ``player_index``."""
+
+    from . import state as state_module
+
+    _config, players, public = _resolve_runtime_components(state)
+    if player_index < 0 or player_index >= len(players):
+        raise IllegalDraw("invalid player index")
+    if public.winner_index is not None:
+        raise IllegalDraw("round already finished")
+    if public.current_player_index != player_index:
+        raise IllegalDraw("not this player's turn")
+    if not can_draw_from_trash(state, player_index):
+        raise IllegalDraw("trash draw is not legal at this time")
+
+    player = players[player_index]
+    card_identifier = public.trash_pile.pop()
+    player.hand_mask = encoding.add_card(player.hand_mask, card_identifier)
+    player.phase = state_module.TurnPhase.AWAITING_TRASH
+    player.last_action_was_trash = False
+    public.last_trash_by = None
+    return card_identifier
+
+
+def trash_card(state: "KonkanState", player_index: int, card_identifier: int) -> None:
+    """Discard ``card_identifier`` to the trash pile for ``player_index``."""
+
+    from . import state as state_module
+
+    config, players, public = _resolve_runtime_components(state)
+    if player_index < 0 or player_index >= len(players):
+        raise IllegalTrash("invalid player index")
+    if public.winner_index is not None:
+        raise IllegalTrash("round already finished")
+    if public.current_player_index != player_index:
+        raise IllegalTrash("not this player's turn to trash")
+
+    player = players[player_index]
+    if player.phase != state_module.TurnPhase.AWAITING_TRASH:
+        raise IllegalTrash("player must draw before trashing")
+    if not encoding.has_card(player.hand_mask, card_identifier):
+        raise IllegalTrash("card not present in hand")
+
+    player.hand_mask = encoding.remove_card(player.hand_mask, card_identifier)
+    public.trash_pile.append(card_identifier)
+    player.last_action_was_trash = True
+
+    if player.hand_mask == 0 and player.has_come_down:
+        public.winner_index = player_index
+        player.phase = state_module.TurnPhase.COMPLETE
+    else:
+        player.phase = state_module.TurnPhase.AWAITING_DRAW
+
+    public.last_trash_by = player_index
+    public.turn_index += 1
+
+    next_player = player_index
+    if config.num_players > 0:
+        next_player = (player_index + 1) % config.num_players
+
+    public.current_player_index = next_player
+    state.player_to_act = next_player
+    state.turn_index = public.turn_index
+
+
+def _hand_points(hand_mask: int) -> int:
+    total = 0
+    for card_id in encoding.cards_from_mask(hand_mask):
+        decoded = encoding.decode_id(card_id)
+        if decoded.is_joker:
+            continue
+        total += encoding.card_points(card_id)
+    return total
+
+
+def final_scores(state: "KonkanState") -> list[int]:
+    """Return post-round scores for each player based on remaining deadwood."""
+
+    from . import state as state_module
+
+    public = state.public
+    if not isinstance(public, state_module.PublicState):
+        raise ValueError("KonkanState public state is not initialised")
+    if public.winner_index is None:
+        raise ValueError("winner has not been determined")
+
+    scores: list[int] = []
+    for idx, player in enumerate(state.players):
+        if idx == public.winner_index:
+            scores.append(0)
+            continue
+        scores.append(_hand_points(player.hand_mask))
+    return scores
+
+
+def sarf_card(
+    state: "KonkanState",
+    player_index: int,
+    target_meld_index: int,
+    card_identifier: int,
+) -> None:
+    """Add ``card_identifier`` to ``target_meld_index`` with Joker swap support."""
+
+    _, players, public = _resolve_runtime_components(state)
+    if public.winner_index is not None:
+        raise RuntimeError("round already finished")
+    if player_index < 0 or player_index >= len(players):
+        raise RuntimeError("invalid player index")
+    if target_meld_index < 0 or target_meld_index >= len(state.table):
+        raise RuntimeError("invalid meld index")
+
+    player = players[player_index]
+    if not player.has_come_down:
+        raise RuntimeError("player must come down before sarfing")
+    if not encoding.has_card(player.hand_mask, card_identifier):
+        raise RuntimeError("card not present in hand")
+
+    meld = state.table[target_meld_index]
+    if meld.is_four_set:
+        raise RuntimeError("cannot modify sealed set")
+
+    decoded = encoding.decode_id(card_identifier)
+    if meld.kind == SET_KIND:
+        if decoded.is_joker:
+            raise RuntimeError("cannot sarf joker into set")
+        existing_suits = {
+            encoding.decode_id(cid).suit_idx
+            for cid in encoding.cards_from_mask(
+                encoding.combine_mask(meld.mask_hi, meld.mask_lo)
+            )
+            if cid not in encoding.JOKER_IDS
+        }
+        if decoded.suit_idx in existing_suits:
+            raise RuntimeError("duplicate suit not allowed in set")
+
+    if decoded.is_joker:
+        raise RuntimeError("cannot sarf joker without swap target")
+
+    card_mask_hi, card_mask_lo = encoding.split_mask(encoding.mask_from_cards([card_identifier]))
+    meld.mask_hi |= card_mask_hi
+    meld.mask_lo |= card_mask_lo
+    player.hand_mask = encoding.remove_card(player.hand_mask, card_identifier)

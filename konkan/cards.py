@@ -73,6 +73,7 @@ class Card:
 
         if self.is_joker:
             return "🃏"
+        assert self.rank is not None and self.suit is not None
         return f"{self.rank.value}{self.suit.value}"
 
 
