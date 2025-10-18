@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "konkan"
@@ -10,25 +10,34 @@ authors = [
   { name = "Konkan AI" }
 ]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 keywords = ["konkan", "card-game", "mcts", "cli"]
 dependencies = [
-  "numpy>=2.34",
-  "numba>=0.62.1",
-  "typer[all]>=0.19.2",
+  "numpy>=2.0,<2.4",
+  "numba==0.63.0b1",
+  "typer>=0.12.3",
   "rich>=14.2.0",
   "pydantic>=2.12.3"
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "pytest>=8.4.2",
-  "maturin>=1.9.6"
+  "maturin>=1.9.6",
+  "mypy>=1.18.2",
+  "ruff>=0.14.1"
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["konkan"]
+[project.scripts]
+konkan-format = "konkan.tools:run_format"
+konkan-lint = "konkan.tools:run_lint"
+konkan-typecheck = "konkan.tools:run_typecheck"
+konkan-test = "konkan.tools:run_test"
+konkan-play = "konkan.cli.main:main"
+
+[tool.setuptools.packages.find]
+include = ["konkan", "konkan.*"]
 
 [tool.typer]
 # Reserved for future Typer configuration.
@@ -40,5 +49,28 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 extend-select = ["B", "C4", "SIM", "I"]
 ignore = ["B905"]
+
+[tool.uv]
+prerelease = "allow"
+
+[tool.mypy]
+python_version = "3.14"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+show_error_codes = true
+strict_optional = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+  "konkan_melds",
+  "konkan_melds.*",
+  "numba",
+]
+ignore_missing_imports = true

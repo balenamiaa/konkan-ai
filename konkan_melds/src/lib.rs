@@ -1,8 +1,21 @@
-//! Rust meld solver scaffolding for Konkan.
+//! Rust meld solver for Konkan.
 
 use pyo3::prelude::*;
+use pyo3::types::PyModule;
+
+mod bitset;
+mod cover;
+mod deck;
+mod runs_sets;
+
+pub use deck::JOKER_IDS;
+
+pub const OBJ_MAX_CARDS: u8 = 0;
+pub const OBJ_MIN_DEADWOOD: u8 = 1;
+pub const OBJ_FIRST_14: u8 = 2;
 
 #[pyclass]
+#[derive(Clone)]
 pub struct Meld {
     #[pyo3(get)]
     pub mask_hi: u64,
@@ -29,25 +42,20 @@ pub struct CoverResult {
 }
 
 #[pyfunction]
-fn enumerate_melds(_mask_hi: u64, _mask_lo: u64) -> PyResult<Vec<Meld>> {
-    Ok(Vec::new())
+fn enumerate_melds(mask_hi: u64, mask_lo: u64) -> PyResult<Vec<Meld>> {
+    Ok(runs_sets::enumerate_melds(mask_hi, mask_lo))
 }
 
 #[pyfunction]
-fn best_cover(_mask_hi: u64, _mask_lo: u64, _objective: u8, _threshold: i32) -> PyResult<CoverResult> {
-    Ok(CoverResult {
-        melds: Vec::new(),
-        covered_cards: 0,
-        total_points: 0,
-        used_jokers: 0,
-    })
+fn best_cover(mask_hi: u64, mask_lo: u64, objective: u8, threshold: i32) -> PyResult<CoverResult> {
+    Ok(cover::best_cover(mask_hi, mask_lo, objective, threshold))
 }
 
 #[pymodule]
-fn konkan_melds(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(enumerate_melds, m)?)?;
-    m.add_function(wrap_pyfunction!(best_cover, m)?)?;
-    m.add_class::<Meld>()?;
-    m.add_class::<CoverResult>()?;
+fn konkan_melds(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(enumerate_melds, module)?)?;
+    module.add_function(wrap_pyfunction!(best_cover, module)?)?;
+    module.add_class::<Meld>()?;
+    module.add_class::<CoverResult>()?;
     Ok(())
 }
