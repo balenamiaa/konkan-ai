@@ -1,7 +1,0 @@
-- [x] Strengthen solver/state test coverage (state logic, meld thresholds)
-- [x] Factor Rust meld core into modular bitset/deck/runs/cover pipeline with comprehensive joker handling
-- [x] Flesh out legal action generator (come-down decisions, sarf operations, discard pruning)
-- [x] Implement RIS-MCTS determinization with opponent-resampling safeguards
-- [x] Build NumPy/Numba rollout heuristics (deadwood, extenders, trash safety) and integrate into IS-MCTS
-- [x] Upgrade CLI visuals and interactions (rich panels, human prompts, table meld details)
-- [x] Add end-to-end IS-MCTS smoke/regression tests and benchmark bot performance
