@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from konkan import encoding, rules, state
+from konkan import actions, encoding, rules, state
 from konkan._compat import np
 from konkan.ismcts import policy
 
@@ -43,5 +43,8 @@ def test_policy_prefers_discarding_deadwood() -> None:
         players=[player],
     )
 
-    priors = policy.evaluate_actions(game_state, [deadwood_card, run_cards[0]])
+    deadwood_action = actions.PlayAction(discard=deadwood_card)
+    keeper_action = actions.PlayAction(discard=run_cards[0])
+
+    priors = policy.evaluate_actions(game_state, [deadwood_action, keeper_action])
     assert priors[0] > priors[1]

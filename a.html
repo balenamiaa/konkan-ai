@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Ranj - The AI Money Machine That Builds & Scales Million-Dollar Online Empires on Autopilot. Join 50,000+ Users Earning $10K–$100K/Month Passively!">
+    <title>RANJ | The AI That Prints Money 24/7 – Limited Lifetime Deal: $297 (90% OFF)</title>
+    
+    <!-- Fonts: Futuristic Neon Vibes + Luxe Gold Accents -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Poppins:wght@300;500;700&family=Rajdhani:wght@700&display=swap" rel="stylesheet">
+    
+    <!-- Libraries for MAX Eye-Candy: Particles, AOS Animations, Vanilla Tilt, Swiper Carousel, Confetti, Countdown -->
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet">
+    <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.7.0/dist/vanilla-tilt.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.6.0/confetti.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        :root {
+            --neon-pink: #ff00ff;
+            --neon-cyan: #00ffff;
+            --gold: #ffd700;
+            --dark: #0a0a0a;
+            --gradient: linear-gradient(45deg, #ff00ff, #00ffff, #ffff00, #ff00ff);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: var(--dark);
+            color: #fff;
+            font-family: 'Poppins', sans-serif;
+            overflow-x: hidden;
+            background: linear-gradient(270deg, #120029, #000000, #001f1f, #120029);
+            background-size: 400% 400%;
+            animation: cosmicGradient 20s ease infinite;
+        }
+        @keyframes cosmicGradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        #particles-js { position: fixed; width: 100%; height: 100%; top: 0; left: 0; z-index: 1; }
+        
+        /* Neon Glow Text */
+        h1, h2, h3 { font-family: 'Orbitron', sans-serif; background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 0 20px rgba(255,0,255,0.5); animation: neonPulse 2s infinite alternate; }
+        @keyframes neonPulse { from { text-shadow: 0 0 20px #ff00ff, 0 0 40px #00ffff; } to { text-shadow: 0 0 40px #ffff00, 0 0 60px #ff00ff; } }
+        
+        /* Pulsing CTA Button */
+        .cta-button {
+            padding: 20px 50px; font-size: 1.5rem; font-weight: 700; background: var(--gradient); border: none; border-radius: 50px; color: #000; cursor: pointer;
+            animation: buttonPulse 1.5s infinite, rainbowGlow 3s linear infinite; box-shadow: 0 0 30px #ff00ff;
+            transition: transform 0.3s;
+        }
+        .cta-button:hover { transform: scale(1.1); box-shadow: 0 0 50px #ffff00; }
+        @keyframes buttonPulse { 0%{transform:scale(1);} 50%{transform:scale(1.05);} 100%{transform:scale(1);} }
+        @keyframes rainbowGlow { 0% { box-shadow: 0 0 30px #ff00ff; } 50% { box-shadow: 0 0 50px #00ffff; } 100% { box-shadow: 0 0 30px #ffff00; } }
+        
+        /* Sections */
+        section { position: relative; z-index: 2; padding: 100px 5%; text-align: center; }
+        .hero { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; margin-top: 50px; }
+        .feature-card {
+            background: rgba(255,255,255,0.05); border-radius: 20px; padding: 40px 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,0,255,0.3);
+            transition: all 0.5s; box-shadow: 0 0 20px rgba(0,255,255,0.2);
+        }
+        .feature-card:hover { transform: translateY(-20px) scale(1.05); box-shadow: 0 0 50px var(--neon-cyan); border-color: var(--gold); }
+        .feature-icon { font-size: 3rem; color: var(--gold); margin-bottom: 20px; animation: float 3s infinite ease-in-out; }
+        @keyframes float { 0%{transform:translateY(0);} 50%{transform:translateY(-10px);} 100%{transform:translateY(0);} }
+        
+        /* Testimonials Carousel */
+        .testimonial-card { background: rgba(0,0,0,0.5); border-radius: 20px; padding: 30px; backdrop-filter: blur(10px); border: 1px solid var(--neon-pink); }
+        .testimonial-avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--gold); margin-bottom: 20px; }
+        
+        /* Pricing Cards */
+        .pricing-grid { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; }
+        .pricing-card {
+            background: linear-gradient(135deg, rgba(255,0,255,0.2), rgba(0,255,255,0.2)); border-radius: 30px; padding: 40px; width: 300px; border: 2px solid var(--gold);
+            box-shadow: 0 0 40px rgba(255,215,0,0.5); position: relative; overflow: hidden;
+        }
+        .pricing-card.popular { transform: scale(1.1); border: 3px dashed var(--gold); animation: popularBounce 2s infinite; }
+        @keyframes popularBounce { 0%{transform:scale(1.1);} 50%{transform:scale(1.15);} 100%{transform:scale(1.1);} }
+        .pricing-card::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: var(--gradient); opacity: 0.1; animation: rotate 10s linear infinite; }
+        @keyframes rotate { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+        .strikethrough { text-decoration: line-through; color: #ff00ff; }
+        
+        /* Countdown Timer */
+        #countdown { font-size: 2rem; color: var(--gold); animation: neonPulse 1s infinite; }
+        
+        /* Earnings Counter */
+        .earnings-counter { font-size: 3rem; font-weight: 900; color: var(--gold); }
+    </style>
+</head>
+<body>
+    <!-- Cosmic Particle Background -->
+    <div id="particles-js"></div>
+
+    <!-- HERO: Explosive Entry -->
+    <section class="hero" data-aos="zoom-in">
+        <h1 style="font-size:6rem; animation: megaGlow 2s infinite;">RANJ</h1>
+        <h2 style="font-size:3rem; margin:20px 0;">The AI Money Machine That Builds $1M Empires on Autopilot</h2>
+        <p style="font-size:1.5rem; max-width:800px; margin:20px auto;">50,000+ Users Are Earning <span style="color:var(--gold); font-weight:700;">$10K–$100K/Month Passively</span>. Zero Skills Needed. Launch Your AI-Powered Business in 60 Seconds!</p>
+        <button class="cta-button" onclick="confetti({particleCount:200, spread:100, origin:{y:0.6}}); alert('Welcome to the Money Matrix!');">Claim Lifetime Access – $297 (90% OFF)</button>
+        <div style="margin-top:30px;" data-aos="fade-up">
+            <p style="color:var(--neon-cyan);">Deal Ends In: <span id="countdown"></span></p>
+            <p class="earnings-counter">Total User Earnings: $<span id="earnings">0</span>+</p>
+        </div>
+    </section>
+
+    <!-- FEATURES: 3D Tilt Cards -->
+    <section data-aos="fade-up">
+        <h2 style="font-size:3rem;">Why Ranj is the #1 AI Wealth Builder</h2>
+        <div class="features-grid">
+            <div class="feature-card" data-tilt data-tilt-glare data-tilt-max-glare="0.5">
+                <i class="fas fa-robot feature-icon"></i>
+                <h3>AI Business Builder</h3>
+                <p>Generates Profitable Ideas + Builds Full Websites in Seconds</p>
+            </div>
+            <div class="feature-card" data-tilt data-tilt-glare data-tilt-max-glare="0.5">
+                <i class="fas fa-dollar-sign feature-icon"></i>
+                <h3>Auto-Monetization</h3>
+                <p>Affiliates, Ads, Ecom – Ranj Handles Sales 24/7</p>
+            </div>
+            <div class="feature-card" data-tilt data-tilt-glare data-tilt-max-glare="0.5">
+                <i class="fas fa-chart-line feature-icon"></i>
+                <h3>Viral Traffic Engine</h3>
+                <p>SEO + Social Automation = 100K Visitors/Month</p>
+            </div>
+            <div class="feature-card" data-tilt data-tilt-glare data-tilt-max-glare="0.5">
+                <i class="fas fa-shield-alt feature-icon"></i>
+                <h3>100% Passive</h3>
+                <p>No Coding, No Ads Spend – Pure Profit Machine</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- TESTIMONIALS: Swiper Carousel -->
+    <section style="background:rgba(0,0,0,0.5);" data-aos="fade-up">
+        <h2 style="font-size:3rem;">Millionaires Created by Ranj</h2>
+        <div class="swiper" style="max-width:800px; margin:50px auto;">
+            <div class="swiper-wrapper">
+                <div class="swiper-slide testimonial-card">
+                    <img src="https://ui-avatars.com/api/?name=Alex+M&background=ffd700&color=000&bold=true" class="testimonial-avatar">
+                    <p>"$127K in 47 Days – Ranj is Insane!"</p>
+                    <p style="color:var(--gold);">- Alex M., Dropped Out to Go Full AI</p>
+                </div>
+                <div class="swiper-slide testimonial-card">
+                    <img src="https://ui-avatars.com/api/?name=Sara+L&background=ffd700&color=000&bold=true" class="testimonial-avatar">
+                    <p>"Quit My Job – Now $45K/Month Passive!"</p>
+                    <p style="color:var(--gold);">- Sara L., Mom of 3</p>
+                </div>
+                <div class="swiper-slide testimonial-card">
+                    <img src="https://ui-avatars.com/api/?name=Mike+T&background=ffd700&color=000&bold=true" class="testimonial-avatar">
+                    <p>"$1.2M in 6 Months – Best Investment Ever"</p>
+                    <p style="color:var(--gold);">- Mike T., Ex-Coder</p>
+                </div>
+            </div>
+            <div class="swiper-pagination"></div>
+        </div>
+    </section>
+
+    <!-- PRICING: Glowing Luxury Cards -->
+    <section data-aos="zoom-in">
+        <h2 style="font-size:3rem;">Lock In Lifetime Access Before Price Jumps to $2,997</h2>
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <h3>Starter</h3>
+                <p class="strikethrough">$997</p>
+                <p style="font-size:2rem; color:var(--gold);">$97 One-Time</p>
+                <ul style="text-align:left; margin:20px 0;">
+                    <li>1 AI Business</li>
+                    <li>Basic Traffic</li>
+                </ul>
+                <button class="cta-button" style="font-size:1rem; padding:15px 30px;">Buy Now</button>
+            </div>
+            <div class="pricing-card popular">
+                <h3 style="color:var(--gold);">LIFETIME PRO</h3>
+                <p class="strikethrough" style="font-size:1.5rem;">$2,997</p>
+                <p style="font-size:3rem; color:var(--gold); font-weight:900;">$297</p>
+                <ul style="text-align:left; margin:20px 0; color:var(--neon-cyan);">
+                    <li><strong>Unlimited AI Businesses</strong></li>
+                    <li>Viral Traffic + SEO Pro</li>
+                    <li>24/7 AI Manager</li>
+                    <li>Priority Support + Updates</li>
+                </ul>
+                <button class="cta-button" onclick="confetti({particleCount:500, spread:180});" style="font-size:1.2rem;">Grab Lifetime Deal NOW</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="hero" style="background:linear-gradient(135deg, #ff00ff22, #00ffff22);">
+        <h2 style="font-size:4rem;">Your Empire Awaits – Activate Ranj Now</h2>
+        <button class="cta-button" style="font-size:2rem; padding:30px 60px;" onclick="confetti({particleCount:300, spread:120, origin:{y:0.8}});">YES, Make Me Rich!</button>
+    </section>
+
+    <script>
+        // Particles: Neon Cyberpunk
+        particlesJS("particles-js", {
+            particles: { number: { value: 100 }, color: { value: ["#ff00ff", "#00ffff", "#ffff00"] }, shape: { type: "circle" }, opacity: { value: 0.8 }, size: { value: 4 }, line_linked: { enable: true, color: "#ffffff", opacity: 0.2 }, move: { enable: true, speed: 3 } },
+            interactivity: { detect_on: "canvas", events: { onhover: { enable: true, mode: "repulse" }, onclick: { enable: true, mode: "push" } } },
+            retina_detect: true
+        });
+
+        // AOS Init
+        AOS.init({ duration: 1200 });
+
+        // Vanilla Tilt Init
+        VanillaTilt.init(document.querySelectorAll("[data-tilt]"), { max: 25, speed: 400, glare: true });
+
+        // Swiper Carousel
+        new Swiper('.swiper', { loop: true, autoplay: { delay: 3000 }, pagination: { el: '.swiper-pagination' } });
+
+        // Countdown Timer (24 Hours)
+        const countdown = () => {
+            const end = new Date().getTime() + 24*60*60*1000;
+            const timer = setInterval(() => {
+                const now = new Date().getTime();
+                const distance = end - now;
+                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                document.getElementById("countdown").innerHTML = `${hours}h ${minutes}m ${seconds}s`;
+                if (distance < 0) clearInterval(timer);
+            }, 1000);
+        };
+        countdown();
+
+        // Earnings Counter Animation
+        const earningsCounter = () => {
+            let count = 0;
+            const target = 1234567890;
+            const interval = setInterval(() => {
+                count += Math.floor(target / 100);
+                document.getElementById("earnings").innerHTML = count.toLocaleString();
+                if (count >= target) clearInterval(interval);
+            }, 50);
+        };
+        setTimeout(earningsCounter, 1000);
+
+        // Mega Glow for H1
+        document.querySelector('h1').style.animation = 'megaGlow 1.5s infinite';
+    </script>
+</body>
+</html>

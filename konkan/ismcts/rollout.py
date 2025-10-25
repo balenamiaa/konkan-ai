@@ -5,8 +5,12 @@ from __future__ import annotations
 import numpy as np
 from numba import njit
 
-from .. import encoding, melds
-from ..state import KonkanState, PublicState
+from .. import actions, encoding
+from ..evaluation import analyze_hand
+from ..ismcts import policy
+from ..state import KonkanState, PublicState, TurnPhase
+from ..threats import card_enables_sarf
+from .. import melds
 
 _NUM_RANKS = len(encoding.RANKS)
 _RANK_POINTS = np.array(encoding.POINTS, dtype=np.int16)
@@ -86,14 +90,50 @@ def simulate(state: KonkanState, player_index: int) -> float:
             return 1.0
         return -1.0
 
+    if public.trash_pile:
+        top_card = public.trash_pile[-1]
+        actor_index = public.current_player_index
+        if card_enables_sarf(state, actor_index, top_card):
+            return 0.85 if actor_index == player_index else -0.85
+
+    rollout_state = state.clone_shallow()
+    start_turn = rollout_state.public.turn_index
+    turns_advanced = 0
+    max_turns = max(1, len(rollout_state.players)) * _ROLLOUT_TURNS
+    for _ in range(max_turns * 2):
+        if rollout_state.public.winner_index is not None:
+            break
+        current_player = rollout_state.public.current_player_index
+        previous_turn = rollout_state.public.turn_index
+        _simulate_turn(rollout_state, current_player)
+        if rollout_state.public.turn_index == previous_turn:
+            # Defensive guard against no-progress situations.
+            break
+        if rollout_state.public.turn_index != previous_turn:
+            turns_advanced += 1
+        if turns_advanced >= max_turns:
+            break
+        if rollout_state.public.turn_index >= start_turn + max_turns:
+            break
+
+    return _evaluate_state(rollout_state, player_index)
+_ROLLOUT_TURNS = 1
+
+
+def _static_heuristic_value(state: KonkanState, player_index: int, threshold: int | None = None) -> float:
+    public = state.public
+    if not isinstance(public, PublicState):  # pragma: no cover - defensive guard
+        return 0.0
+
     player = state.players[player_index]
     hand_cards_list = encoding.cards_from_mask(player.hand_mask)
     if not hand_cards_list:
         return 0.0
 
-    threshold = 81
-    if state.config is not None:
-        threshold = state.config.come_down_points
+    if threshold is None:
+        threshold = 81
+        if state.config is not None:
+            threshold = state.config.come_down_points
     if public.highest_table_points > 0:
         threshold = max(threshold, public.highest_table_points + 1)
 
@@ -117,4 +157,74 @@ def simulate(state: KonkanState, player_index: int) -> float:
         score += 5.0
     score -= float(hand_array.size)
 
-    return score / 100.0
+    metrics = analyze_hand(state, player_index, threshold, demand_samples=1)
+    if metrics:
+        avg_keep = sum(metric.keep_value() for metric in metrics.values()) / float(len(metrics))
+        score += 3.0 * avg_keep
+
+    return score
+
+
+def _evaluate_state(state: KonkanState, player_index: int, threshold: int | None = None) -> float:
+    public = state.public
+    if not isinstance(public, PublicState):  # pragma: no cover - defensive guard
+        return 0.0
+    if public.winner_index is not None:
+        return 1.0 if public.winner_index == player_index else -1.0
+    return _static_heuristic_value(state, player_index, threshold) / 100.0
+
+
+def _apply_best_draw_action(state: KonkanState, player_index: int) -> None:
+    draw_actions = actions.legal_draw_actions(state, player_index)
+    if not draw_actions:
+        return
+
+    if len(draw_actions) == 1:
+        actions.apply_draw_action(state, player_index, draw_actions[0])
+        return
+
+    best_score = -1e9
+    best_action = draw_actions[0]
+    for action in draw_actions:
+        clone = state.clone_shallow()
+        actions.apply_draw_action(clone, player_index, action)
+        value = _evaluate_state(clone, player_index)
+        if value > best_score:
+            best_score = value
+            best_action = action
+
+    actions.apply_draw_action(state, player_index, best_action)
+
+
+def _apply_best_play_action(state: KonkanState, player_index: int) -> None:
+    play_actions = actions.legal_play_actions(state, player_index)
+    if not play_actions:
+        return
+
+    scores = policy.evaluate_actions(state, play_actions, demand_samples=1)
+    if not scores:
+        actions.apply_play_action(state, player_index, play_actions[0])
+        return
+
+    best_idx = 0
+    best_score = scores[0]
+    for idx, score in enumerate(scores[1:], start=1):
+        if score > best_score:
+            best_idx = idx
+            best_score = score
+
+    actions.apply_play_action(state, player_index, play_actions[best_idx])
+
+
+def _simulate_turn(state: KonkanState, player_index: int) -> None:
+    player = state.players[player_index]
+
+    if player.phase == TurnPhase.AWAITING_DRAW:
+        _apply_best_draw_action(state, player_index)
+
+    if state.public.current_player_index != player_index:
+        return
+
+    player = state.players[player_index]
+    if player.phase == TurnPhase.AWAITING_TRASH:
+        _apply_best_play_action(state, player_index)

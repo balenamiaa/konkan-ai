@@ -3,18 +3,27 @@
 from __future__ import annotations
 
 import random
+import sys
+import termios
+import tty
 from dataclasses import dataclass
-from typing import Sequence, cast
+from typing import Callable, Sequence, Set
 
 import typer
 from rich import box
+from rich.align import Align
 from rich.console import Console
+from rich.layout import Layout
+from rich.live import Live
+from rich.panel import Panel
 from rich.table import Table
 
-from .. import actions, encoding, rules, scoreboard, state
+from .. import actions, benchmark, encoding, melds, scoreboard, state
+from ..ismcts.opponents import OpponentModel
 from ..ismcts.search import SearchConfig, run_search
 from ..state import PublicState
 from .render import format_card, render_state
+from .textual import run_textual_app
 
 
 @dataclass(slots=True)
@@ -54,29 +63,223 @@ def _ensure_stock(state_obj: state.KonkanState, rng: random.Random) -> None:
     public.trash_pile = [top_card]
 
 
-def _prompt_draw_action(
-    draw_actions: list[actions.DrawAction], public: PublicState
-) -> actions.DrawAction:
-    labels = []
+MAX_EVENT_LOG = 12
+
+
+def _append_event(log: list[str], message: str) -> None:
+    """Append ``message`` to ``log`` maintaining a bounded log length."""
+
+    log.append(message)
+    excess = len(log) - MAX_EVENT_LOG
+    if excess > 0:
+        del log[:excess]
+
+
+def _format_draw_entries(
+    draw_actions: Sequence[actions.DrawAction],
+    public: PublicState,
+) -> list[str]:
+    """Return formatted entries describing available draw actions."""
+
+    entries: list[str] = []
     for idx, action in enumerate(draw_actions, start=1):
         if action.source == "deck":
-            label = f"{idx}. Draw from deck"
+            label = "Draw from deck"
         else:
             top = public.trash_pile[-1] if public.trash_pile else None
-            label = (
-                f"{idx}. Take trash ({format_card(top)})"
-                if top is not None
-                else f"{idx}. Take trash"
-            )
-        labels.append(label)
-    console.print("\n".join(labels))
+            label = "Take trash"
+            if top is not None:
+                label += f" ({format_card(top)})"
+        entries.append(f"[bold]{idx}[/bold] {label}")
+    return entries
+
+
+def _format_play_entries(play_actions: Sequence[actions.PlayAction]) -> list[str]:
+    """Return formatted entries describing discard-phase actions."""
+
+    return [f"[bold]{idx}[/bold] {_describe_play_action(action)}" for idx, action in enumerate(play_actions, start=1)]
+
+
+def _actor_label(ctx: PlayerContext) -> str:
+    return "[yellow]You[/yellow]" if ctx.role == "Human" else f"[cyan]{ctx.label}[/cyan]"
+
+
+def _event_panel(events: Sequence[str]) -> Panel:
+    log_table = Table.grid(expand=True)
+    log_table.add_column(justify="left")
+    if events:
+        for line in events[-MAX_EVENT_LOG:]:
+            log_table.add_row(line)
+    else:
+        log_table.add_row("[dim]Event log will appear here[/dim]")
+    return Panel(log_table, title="Event Log", border_style="magenta", box=box.SIMPLE)
+
+
+def _build_layout(
+    state_obj: state.KonkanState,
+    roles: Sequence[str],
+    reveal_players: Sequence[int],
+    events: Sequence[str],
+    *,
+    status_message: str = "",
+    footer_message: str | None = None,
+    action_entries: Sequence[str] | None = None,
+    selected_index: int | None = None,
+    highlight_map: dict[int, Set[int]] | None = None,
+    debug_stats: dict[int, dict[str, object]] | None = None,
+    debug_panel: Panel | None = None,
+    show_debug: bool = False,
+) -> Layout:
+    public = state_obj.public if isinstance(state_obj.public, PublicState) else None
+    header_parts = ["[bold cyan]Konkan[/bold cyan]"]
+    if public is not None:
+        header_parts.append(f"Turn {public.turn_index}")
+        header_parts.append(f"Active: [yellow]P{public.current_player_index}[/yellow]")
+    if status_message:
+        header_parts.append(status_message)
+    header_text = " • ".join(header_parts)
+
+    layout = Layout()
+    layout.split(
+        Layout(name="header", size=3),
+        Layout(name="body"),
+        Layout(name="footer", size=6 if action_entries else 4),
+    )
+
+    header_panel = Panel(
+        Align.center(header_text, vertical="middle"),
+        border_style="cyan",
+        box=box.ROUNDED,
+    )
+    layout["header"].update(header_panel)
+
+    body_layout = Layout()
+    columns = [
+        Layout(
+            render_state(
+                state_obj,
+                roles,
+                reveal_players=reveal_players,
+                highlight_map=highlight_map or {},
+                show_debug=show_debug,
+                debug_stats=debug_stats or {},
+                title="Table State",
+            ),
+            name="table",
+            ratio=3,
+        )
+    ]
+    if debug_panel is not None:
+        columns.append(Layout(debug_panel, name="debug", ratio=2))
+    columns.append(Layout(_event_panel(events), name="events", ratio=2))
+    body_layout.split_row(*columns)
+    layout["body"].update(body_layout)
+
+    if action_entries:
+        actions_table = Table.grid(expand=True)
+        actions_table.add_column(justify="left")
+        for idx, entry in enumerate(action_entries):
+            pointer = "➤ " if selected_index is not None and idx == selected_index else "  "
+            display = f"{pointer}{entry}"
+            if selected_index is not None and idx == selected_index:
+                actions_table.add_row(f"[reverse]{display}[/reverse]")
+            else:
+                actions_table.add_row(display)
+        footer_panel = Panel(
+            actions_table,
+            title=footer_message or "Choose an option",
+            border_style="yellow",
+            box=box.ROUNDED,
+        )
+    else:
+        footer_panel = Panel(
+            Align.center(footer_message or "Awaiting next step", vertical="middle"),
+            border_style="yellow",
+            box=box.ROUNDED,
+        )
+    layout["footer"].update(footer_panel)
+    return layout
+
+
+def _refresh_layout(
+    live: Live,
+    game_state: state.KonkanState,
+    roles: Sequence[str],
+    reveal_players: Sequence[int],
+    events: Sequence[str],
+    *,
+    status_message: str = "",
+    footer_message: str | None = None,
+    action_entries: Sequence[str] | None = None,
+    selected_index: int | None = None,
+    highlight_targets: Sequence[int] | None = None,
+    debug: bool = False,
+    search_config: SearchConfig | None = None,
+    opponent_model: OpponentModel | None = None,
+) -> None:
+    highlight_map = _compute_highlights(game_state, highlight_targets or [])
+    debug_stats = _collect_debug_stats(game_state) if debug else {}
+    debug_panel = (
+        _debug_info_panel(game_state, search_config, opponent_model) if debug else None
+    )
+    live.update(
+        _build_layout(
+            game_state,
+            roles,
+            reveal_players,
+            events,
+            status_message=status_message,
+            footer_message=footer_message,
+            action_entries=action_entries,
+            selected_index=selected_index,
+            highlight_map=highlight_map,
+            debug_stats=debug_stats,
+            debug_panel=debug_panel,
+            show_debug=debug,
+        )
+    )
+
+
+def _read_key() -> str:
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":
+            ch += sys.stdin.read(2)
+        return ch
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def _interactive_select(
+    entries: Sequence[str],
+    update_fn: Callable[[int], None],
+    *,
+    initial_index: int = 0,
+) -> int:
+    if not entries:
+        raise ValueError("interactive selection requires at least one entry")
+    index = initial_index % len(entries)
     while True:
-        choice = typer.prompt("Select draw action", default="1").strip()
-        if choice.isdigit():
-            index = int(choice) - 1
-            if 0 <= index < len(draw_actions):
-                return draw_actions[index]
-        console.print("[red]Invalid selection. Please try again.[/red]")
+        update_fn(index)
+        key = _read_key()
+        if key in {"\r", "\n"}:
+            return index
+        if key == "\x03":  # Ctrl+C
+            raise KeyboardInterrupt
+        if key in {"\x1b[A", "k", "w"}:
+            index = (index - 1) % len(entries)
+            continue
+        if key in {"\x1b[B", "j", "s"}:
+            index = (index + 1) % len(entries)
+            continue
+        if key.isdigit() and key != "0":
+            value = int(key) - 1
+            if 0 <= value < len(entries):
+                return value
+        # ignore all other keys
 
 
 def _choose_ai_draw_action(draw_actions: list[actions.DrawAction]) -> actions.DrawAction:
@@ -96,20 +299,6 @@ def _describe_play_action(action: actions.PlayAction) -> str:
     return " & ".join(parts)
 
 
-def _prompt_play_action(play_actions: list[actions.PlayAction]) -> actions.PlayAction:
-    entries = [
-        f"{idx + 1}. {_describe_play_action(action)}" for idx, action in enumerate(play_actions)
-    ]
-    console.print("\n".join(entries))
-    while True:
-        choice = typer.prompt("Select action", default="1").strip()
-        if choice.isdigit():
-            index = int(choice) - 1
-            if 0 <= index < len(play_actions):
-                return play_actions[index]
-        console.print("[red]Invalid selection. Please try again.[/red]")
-
-
 def _choose_ai_play_action(
     game_state: state.KonkanState,
     player_index: int,
@@ -118,27 +307,19 @@ def _choose_ai_play_action(
     play_actions: list[actions.PlayAction],
 ) -> actions.PlayAction:
     node = run_search(game_state, rng, search_config)
-    candidate_discards = list(node.actions)
-    chosen_discard: int
-    if not candidate_discards or candidate_discards[0] is None:
-        hand_cards = encoding.cards_from_mask(game_state.players[player_index].hand_mask)
-        chosen_discard = hand_cards[0]
-    else:
+    candidate_actions = list(node.actions)
+    if candidate_actions and candidate_actions[0] is not None:
         chosen_index = node.best_action_index()
-        chosen_discard = cast(int, candidate_discards[chosen_index])
+        chosen = candidate_actions[chosen_index]
+        if isinstance(chosen, actions.PlayAction):
+            return chosen
 
-    matching = [action for action in play_actions if action.discard == chosen_discard]
-    if matching:
-        for action in matching:
-            if action.lay_down and action.sarf_moves:
-                return action
-        for action in matching:
-            if action.sarf_moves:
-                return action
-        for action in matching:
-            if action.lay_down:
-                return action
-        return matching[0]
+    hand_cards = encoding.cards_from_mask(game_state.players[player_index].hand_mask)
+    fallback_discard = hand_cards[0] if hand_cards else play_actions[0].discard
+
+    for action in play_actions:
+        if action.discard == fallback_discard:
+            return action
     return play_actions[0]
 
 
@@ -147,8 +328,8 @@ def _render_round_summary(
     summary: scoreboard.RoundSummary,
     players_ctx: Sequence[PlayerContext],
     roles: Sequence[str],
-) -> None:
-    """Render a table describing the outcome of a round."""
+) -> Table:
+    """Return a Rich table describing the outcome of a round."""
 
     table = Table(title=f"Round {summary.round_number} Summary", box=box.SIMPLE_HEAVY)
     table.add_column("Player", justify="center")
@@ -176,15 +357,15 @@ def _render_round_summary(
             str(entry.net_points),
         )
 
-    console.print(table)
+    return table
 
 
 def _render_match_summary(
     history: scoreboard.MatchHistory,
     players_ctx: Sequence[PlayerContext],
     roles: Sequence[str],
-) -> None:
-    """Render the aggregated match summary."""
+) -> Table:
+    """Return the aggregated match summary table."""
 
     totals = history.totals()
     table = Table(title="Match Summary", box=box.DOUBLE_EDGE)
@@ -216,134 +397,207 @@ def _render_match_summary(
             net_str,
         )
 
-    console.print(table)
+    return table
 
+
+def _compute_highlights(game_state: state.KonkanState, players: Sequence[int]) -> dict[int, Set[int]]:
+    highlights: dict[int, Set[int]] = {}
+    if not players:
+        return highlights
+    public = _public_state(game_state)
+    base_threshold = 81
+    if game_state.config is not None:
+        base_threshold = game_state.config.come_down_points
+    if public.highest_table_points > 0:
+        base_threshold = max(base_threshold, public.highest_table_points + 1)
+
+    for idx in players:
+        if idx < 0 or idx >= len(game_state.players):
+            continue
+        player = game_state.players[idx]
+        mask_hi, mask_lo = encoding.split_mask(player.hand_mask)
+        try:
+            cover = melds.best_cover_to_threshold(mask_hi, mask_lo, base_threshold)
+        except Exception:  # pragma: no cover - defensive guard
+            continue
+        highlight_cards: Set[int] = set()
+        for meld_entry in cover.melds:
+            entry_mask = encoding.combine_mask(
+                int(getattr(meld_entry, "mask_hi", 0)),
+                int(getattr(meld_entry, "mask_lo", 0)),
+            )
+            highlight_cards.update(encoding.cards_from_mask(entry_mask))
+        highlights[idx] = highlight_cards
+    return highlights
+
+
+def _collect_debug_stats(game_state: state.KonkanState) -> dict[int, dict[str, object]]:
+    stats: dict[int, dict[str, object]] = {}
+    for idx, player in enumerate(game_state.players):
+        hand_cards = encoding.cards_from_mask(player.hand_mask)
+        stats[idx] = {
+            "hand_size": len(hand_cards),
+            "deadwood": encoding.points_from_mask(player.hand_mask),
+            "laid_points": getattr(player, "laid_points", 0),
+            "table_points": getattr(player, "laid_points", 0),
+            "phase": player.phase.value if hasattr(player, "phase") else "?",
+        }
+    return stats
+
+
+def _debug_info_panel(
+    game_state: state.KonkanState,
+    search_config: SearchConfig | None,
+    opponent_model: OpponentModel | None,
+) -> Panel:
+    public = _public_state(game_state)
+    grid = Table.grid(expand=True)
+    grid.add_column(justify="left")
+    deck_size = len(public.draw_pile)
+    trash_size = len(public.trash_pile)
+    top_trash = format_card(public.trash_pile[-1]) if public.trash_pile else "—"
+    threshold = 81
+    if game_state.config is not None:
+        threshold = game_state.config.come_down_points
+    if public.highest_table_points > 0:
+        threshold = max(threshold, public.highest_table_points + 1)
+
+    grid.add_row(f"[cyan]Deck[/cyan]: {deck_size}")
+    grid.add_row(f"[cyan]Trash[/cyan]: {trash_size} (top {top_trash})")
+    grid.add_row(f"[cyan]Threshold[/cyan]: {threshold}")
+    if search_config is not None and search_config.dirichlet_alpha:
+        grid.add_row(
+            f"Dirichlet α={search_config.dirichlet_alpha:.2f} w={search_config.dirichlet_weight:.2f}"
+        )
+    else:
+        grid.add_row("Dirichlet: off")
+    grid.add_row(f"Opponent priors: {'on' if opponent_model else 'off'}")
+
+    return Panel(grid, title="Debug Info", border_style="green", box=box.SIMPLE)
+
+
+def _assign_dealer(game_state: state.KonkanState, dealer_index: int) -> int:
+    public = _public_state(game_state)
+    if not public.draw_pile:
+        raise RuntimeError("draw pile empty while assigning dealer")
+    extra_card = public.draw_pile.pop()
+    dealer_state = game_state.players[dealer_index]
+    dealer_state.hand_mask = encoding.add_card(dealer_state.hand_mask, extra_card)
+    dealer_state.phase = state.TurnPhase.AWAITING_TRASH
+    dealer_state.last_action_was_trash = False
+
+    for idx, player in enumerate(game_state.players):
+        if idx == dealer_index:
+            continue
+        player.phase = state.TurnPhase.AWAITING_DRAW
+        player.last_action_was_trash = False
+
+    public.current_player_index = dealer_index
+    public.turn_index = 0
+    game_state.player_to_act = dealer_index
+    game_state.first_player_has_discarded = False
+
+    return extra_card
 
 @app.command()
 def play(
     players: int = typer.Option(3, min=2, max=3, help="Number of seated players."),
     humans: int = typer.Option(1, min=0, help="Human-controlled seats starting from P0."),
-    seed: int = typer.Option(42, help="Random seed used for shuffling and search."),
+    seed: int | None = typer.Option(None, help="Random seed for reproducible games (omit for randomness)."),
     simulations: int = typer.Option(128, min=1, help="MCTS simulations per AI discard."),
-    rounds: int = typer.Option(1, min=1, help="Number of consecutive rounds to play."),
+    dirichlet_alpha: float = typer.Option(0.0, min=0.0, help="Root Dirichlet alpha (0 disables noise)."),
+    dirichlet_weight: float = typer.Option(0.25, min=0.0, max=1.0, help="Mixture weight for Dirichlet noise."),
+    opponent_priors: bool = typer.Option(
+        True,
+        "--opponent-priors/--no-opponent-priors",
+        help="Enable heuristic opponent prior adjustments.",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Reveal enemy hands, highlight melds, and show additional statistics.",
+    ),
 ) -> None:
-    """Play a Konkan match against AI opponents."""
-
     if humans > players:
         raise typer.BadParameter("Humans cannot exceed the total number of players.")
 
-    rng = random.Random(seed)
-    roles = ["Human" if idx < humans else "AI" for idx in range(players)]
-    players_ctx = [PlayerContext(label=f"P{idx}", role=roles[idx]) for idx in range(players)]
+    run_textual_app(
+        players=players,
+        humans=humans,
+        seed=seed,
+        simulations=simulations,
+        dirichlet_alpha=dirichlet_alpha if dirichlet_alpha > 0 else None,
+        dirichlet_weight=dirichlet_weight,
+        opponent_priors=opponent_priors,
+        debug=debug,
+    )
 
-    search_config = SearchConfig(simulations=simulations)
-    history = scoreboard.MatchHistory(players)
-    dealer_index = (players - 1) % players if players else 0
 
-    for round_number in range(1, rounds + 1):
-        deck = _build_deck()
-        rng.shuffle(deck)
+@app.command("benchmark")
+def benchmark_cli(
+    rounds: int = typer.Option(10, min=1, help="Number of head-to-head rounds."),
+    baseline_sims: int = typer.Option(128, min=1, help="Simulations per move for the baseline agent."),
+    challenger_sims: int = typer.Option(256, min=1, help="Simulations per move for the challenger."),
+    seed: int = typer.Option(123, help="Random seed for the benchmark."),
+    dirichlet_alpha: float = typer.Option(0.0, min=0.0, help="Root Dirichlet alpha (0 disables noise)."),
+    dirichlet_weight: float = typer.Option(0.25, min=0.0, max=1.0, help="Mixture weight for Dirichlet noise."),
+    opponent_priors: bool = typer.Option(
+        True,
+        "--opponent-priors/--no-opponent-priors",
+        help="Enable heuristic opponent prior adjustments for both agents.",
+    ),
+) -> None:
+    """Run a baseline vs. challenger benchmark."""
 
-        config = state.KonkanConfig(
-            num_players=players,
-            hand_size=14,
-            come_down_points=81,
-            allow_trash_first_turn=False,
-            dealer_index=dealer_index,
-            first_player_hand_size=15,
-        )
+    opponent_model = OpponentModel() if opponent_priors else None
+    alpha = dirichlet_alpha if dirichlet_alpha > 0 else None
 
-        game_state = state.deal_new_game(config, deck)
-        if players:
-            opener = _public_state(game_state).current_player_index
-            game_state.players[opener].phase = state.TurnPhase.AWAITING_TRASH
+    baseline_config = SearchConfig(
+        simulations=baseline_sims,
+        dirichlet_alpha=alpha,
+        dirichlet_weight=dirichlet_weight,
+        opponent_model=opponent_model,
+    )
+    challenger_config = SearchConfig(
+        simulations=challenger_sims,
+        dirichlet_alpha=alpha,
+        dirichlet_weight=dirichlet_weight,
+        opponent_model=opponent_model,
+    )
 
-        console.print(f"\n[magenta]Round {round_number}[/magenta]")
-        console.print(render_state(game_state, roles, reveal_players=range(humans)))
+    report = benchmark.run_head_to_head(
+        rounds=rounds,
+        baseline=baseline_config,
+        challenger=challenger_config,
+        seed=seed,
+    )
 
-        while True:
-            public = _public_state(game_state)
-            if public.winner_index is not None:
-                break
+    table = Table(title="Head-to-Head Benchmark", box=box.SIMPLE_HEAVY)
+    table.add_column("Agent", justify="center")
+    table.add_column("Wins", justify="right")
+    table.add_column("Laid", justify="right")
+    table.add_column("Deadwood", justify="right")
+    table.add_column("Net", justify="right")
 
-            current = public.current_player_index
-            ctx = players_ctx[current]
-            player = game_state.players[current]
+    table.add_row(
+        "Baseline",
+        str(report.baseline.wins),
+        str(report.baseline.laid_points),
+        str(report.baseline.deadwood_points),
+        str(report.baseline.net_points),
+    )
+    table.add_row(
+        "Challenger",
+        str(report.challenger.wins),
+        str(report.challenger.laid_points),
+        str(report.challenger.deadwood_points),
+        str(report.challenger.net_points),
+    )
 
-            if player.phase == state.TurnPhase.AWAITING_DRAW:
-                _ensure_stock(game_state, rng)
-                draw_options = actions.legal_draw_actions(game_state, current)
-                if not draw_options:  # pragma: no cover - defensive guard
-                    raise RuntimeError("No legal draw actions available")
+    console.print(table)
 
-                if ctx.role == "Human":
-                    selected = _prompt_draw_action(draw_options, public)
-                else:
-                    selected = _choose_ai_draw_action(draw_options)
-                    console.print(
-                        f"[cyan]{ctx.label}[/cyan] drew from {'trash' if selected.source == 'trash' else 'deck'}"
-                    )
-
-                actions.apply_draw_action(game_state, current, selected)
-                console.print(render_state(game_state, roles, reveal_players=range(humans)))
-                continue
-
-            hand_cards = encoding.cards_from_mask(player.hand_mask)
-            if ctx.role == "Human":
-                play_options = actions.legal_play_actions(
-                    game_state, current, max_discards=min(5, len(hand_cards))
-                )
-            else:
-                play_options = actions.legal_play_actions(
-                    game_state, current, max_discards=len(hand_cards)
-                )
-
-            if not play_options:  # pragma: no cover - defensive guard
-                raise RuntimeError("No legal play actions available")
-
-            if ctx.role == "Human":
-                selected_action = _prompt_play_action(play_options)
-                actions.apply_play_action(game_state, current, selected_action)
-                prefix = "Lay down & " if selected_action.lay_down else ""
-                console.print(f"You {prefix}discarded {format_card(selected_action.discard)}")
-            else:
-                selected_action = _choose_ai_play_action(
-                    game_state, current, rng, search_config, play_options
-                )
-                actions.apply_play_action(game_state, current, selected_action)
-                prefix = "laying down & " if selected_action.lay_down else ""
-                console.print(
-                    f"[cyan]{ctx.label}[/cyan] {prefix}discarded [bold]{format_card(selected_action.discard)}[/bold]"
-                )
-
-            console.print(render_state(game_state, roles, reveal_players=range(humans)))
-
-        winner = _public_state(game_state).winner_index
-        if winner is not None:
-            ctx = players_ctx[winner]
-            if ctx.role == "Human":
-                console.print("[bold green]You win the round![/bold green]")
-            else:
-                console.print(f"[bold red]{ctx.label} wins the round.[/bold red]")
-
-        try:
-            scores = rules.final_scores(game_state)
-        except ValueError:
-            scores = []
-
-        if scores:
-            summary = scoreboard.RoundSummary(
-                round_number=round_number,
-                winner_index=winner if winner is not None else -1,
-                scores=scores,
-            )
-            history.record(summary)
-            _render_round_summary(summary, players_ctx, roles)
-
-        dealer_index = (dealer_index + 1) % players if players else 0
-
-    if history.rounds:
-        _render_match_summary(history, players_ctx, roles)
+    if report.history.rounds:
+        console.print(f"[cyan]{len(report.history.rounds)} round(s) simulated.[/cyan]")
 
 
 def main() -> None:

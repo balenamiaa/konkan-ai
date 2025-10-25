@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence, Set
 
 from rich.console import RenderableType
 from rich.panel import Panel
@@ -37,6 +37,9 @@ def render_state(
     roles: Sequence[str],
     *,
     reveal_players: Iterable[int] | None = None,
+    highlight_map: Mapping[int, Set[int]] | None = None,
+    show_debug: bool = False,
+    debug_stats: Mapping[int, Mapping[str, object]] | None = None,
     title: str = "Konkan",
 ) -> RenderableType:
     """Return a Rich panel describing the current table state."""
@@ -46,5 +49,8 @@ def render_state(
         roles=roles,
         reveal_players=set(reveal_players or set()),
         card_formatter=format_card,
+        highlights=highlight_map or {},
+        show_debug=show_debug,
+        debug_stats=debug_stats or {},
     )
     return Panel(view.render(), title=title, padding=(0, 1), border_style="cyan")

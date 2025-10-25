@@ -1,6 +1,6 @@
 # Konkan AI
 
-Konkan AI is a modern playground for experimenting with information-set Monte Carlo tree search (IS-MCTS) strategies for the three-player Konkan card game. The project blends Python orchestration, a Rust meld solver, and an expressive Typer/Rich CLI to deliver a competitive and stylish tabletop experience.
+Konkan AI is a modern playground for experimenting with information-set Monte Carlo tree search (IS-MCTS) strategies for the three-player Konkan card game. The project blends Python orchestration, a Rust meld solver, and a Textual-powered terminal experience to deliver a competitive and stylish tabletop session.
 
 ## Development setup
 
@@ -42,17 +42,32 @@ uv run konkan-test
 
 ## Command line play
 
-Fire up the CLI for a quick match against AI opponents:
+Fire up the Textual UI for a quick match against AI opponents:
 
 ```bash
-uv run konkan-play --players 3 --humans 1 --simulations 256 --rounds 5
+uv run konkan-play play --players 3 --humans 1 --simulations 256 \
+  --dirichlet-alpha 0.3 --dirichlet-weight 0.25 --debug
 ```
 
-The command supports two or three seats, with any number of humans from zero to the player count. During your turn the CLI renders the full table, prompts for draw and discard decisions, and lets you lay down melds once you satisfy the coming-down threshold. Multi-round sessions (`--rounds`) track laid meld points, deadwood penalties, round winners, and aggregate match totals; Rich tables appear after every round and again at the end of the match.
+The UI supports two or three seats, with any number of humans from zero to the player count. Each turn renders the full table, a rolling event log, highlighted meld suggestions, and an action palette that accepts arrow keys or number shortcuts. Key bindings:
+
+- `D` — toggle the debug overlay (search stats, deck/trash counts).
+- `H` — reveal or hide every hand (handy for post-game analysis).
+- `N` — advance to the next round after a winner is declared.
+- `Q` — exit the session at any time.
+
+Points, laid melds, and deadwood totals accumulate automatically across rounds via a live scoreboard. Optional knobs such as `--dirichlet-alpha` / `--dirichlet-weight` inject AlphaZero-style exploration, `--no-opponent-priors` disables the heuristic opponent model, and `--debug` enables the richer overlays right from the first frame.
 
 ### Head-to-head benchmarks
 
-Automated head-to-head runs help compare different IS-MCTS settings. Drop into a Python shell and call the benchmark harness:
+Automated head-to-head runs help compare different IS-MCTS settings. Launch them straight from the CLI:
+
+```bash
+uv run konkan-play benchmark --rounds 20 --baseline-sims 128 --challenger-sims 256 \
+  --dirichlet-alpha 0.3 --dirichlet-weight 0.2
+```
+
+Prefer Python? The underlying harness remains available:
 
 ```python
 from konkan.benchmark import run_head_to_head

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Sequence, Set
+from dataclasses import dataclass, field
+from typing import Callable, Mapping, Sequence, Set
 
 from rich import box
 from rich.console import Group, RenderableType
@@ -23,13 +23,36 @@ class StateSummaryView:
     roles: Sequence[str]
     reveal_players: Set[int]
     card_formatter: Callable[[int], str]
+    highlights: Mapping[int, Set[int]] = field(default_factory=dict)
+    show_debug: bool = False
+    debug_stats: Mapping[int, Mapping[str, object]] = field(default_factory=dict)
 
-    def _hand_markup(self, cards: list[int], visible: bool) -> str:
+    def _hand_markup(self, cards: list[int], visible: bool, highlight_set: Set[int]) -> str:
         if not visible:
             return f"{len(cards)} cards"
         if not cards:
             return "—"
-        return " ".join(self.card_formatter(card) for card in cards)
+        highlight_lookup = set(highlight_set)
+
+        def _sort_key(card_id: int) -> tuple[int, int, int, int]:
+            decoded = encoding.decode_id(card_id)
+            suit_idx = decoded.suit_idx if decoded.suit_idx is not None else 0
+            rank_idx = decoded.rank_idx if decoded.rank_idx is not None else 0
+            copy = decoded.copy if decoded.copy is not None else 0
+            return (suit_idx, rank_idx, copy, card_id)
+
+        highlight_cards = sorted([card for card in cards if card in highlight_lookup], key=_sort_key)
+        other_cards = sorted([card for card in cards if card not in highlight_lookup], key=_sort_key)
+        ordered_cards = highlight_cards + other_cards
+
+        formatted: list[str] = []
+        for card in ordered_cards:
+            rendered = self.card_formatter(card)
+            if card in highlight_lookup:
+                formatted.append(f"[bold green]{rendered}[/bold green]")
+            else:
+                formatted.append(rendered)
+        return " ".join(formatted)
 
     def _metadata_panel(self, public: PublicState, threshold: int) -> Panel:
         grid = Table.grid(expand=True)
@@ -56,6 +79,8 @@ class StateSummaryView:
         table.add_column("Laid", justify="left")
         table.add_column("Status", justify="left")
         table.add_column("Phase", justify="left")
+        if self.show_debug:
+            table.add_column("Stats", justify="left")
 
         winner_index = public.winner_index
         threshold = 81
@@ -69,8 +94,10 @@ class StateSummaryView:
             hand_cards = encoding.cards_from_mask(player.hand_mask)
             laid_cards = encoding.cards_from_mask(player.laid_mask)
             visible = idx in self.reveal_players
-            hand_display = self._hand_markup(hand_cards, visible)
-            laid_display = self._hand_markup(laid_cards, True)
+            highlight_set = set(self.highlights.get(idx, set()))
+            laid_highlight = set(self.highlights.get(idx, set()))
+            hand_display = self._hand_markup(hand_cards, visible, highlight_set)
+            laid_display = self._hand_markup(laid_cards, True, laid_highlight)
 
             status_text = "Down" if player.has_come_down else "Up"
             if winner_index == idx:
@@ -81,7 +108,23 @@ class StateSummaryView:
             if idx == public.current_player_index:
                 name = f"[bold yellow]{name}[/bold yellow]"
 
-            table.add_row(name, role, hand_display, laid_display, status_text, phase_text)
+            stats_display = ""
+            if self.show_debug:
+                stats = self.debug_stats.get(idx, {})
+                hand_size = stats.get("hand_size", len(hand_cards))
+                deadwood = stats.get("deadwood", encoding.points_from_mask(player.hand_mask))
+                laid_points = stats.get("laid_points", player.laid_points)
+                table_points = stats.get("table_points", getattr(player, "laid_points", 0))
+                stats_display = (
+                    f"H:{hand_size} D:{deadwood} L:{laid_points} T:{table_points}"
+                    if stats
+                    else "—"
+                )
+
+            row = [name, role, hand_display, laid_display, status_text, phase_text]
+            if self.show_debug:
+                row.append(stats_display)
+            table.add_row(*row)
 
         meta = self._metadata_panel(public, threshold)
 

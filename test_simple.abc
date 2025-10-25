@@ -1,0 +1,15 @@
+X:1
+T:Simple Test
+M:4/4
+L:1/4
+K:C
+
+CDEF | GABc | dedc | BAGz |
+
+X:2
+T:Another Test
+M:3/4
+L:1/8
+K:G
+
+|: D2G2B2 | A2F2D2 | G2B2d2 | c4 :|

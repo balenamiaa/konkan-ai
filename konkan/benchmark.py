@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Sequence, cast
+from typing import Sequence
 
 from . import actions, encoding, rules, scoreboard, state
 from .ismcts.search import SearchConfig, run_search
@@ -64,28 +64,20 @@ def _choose_play_action(
     play_actions: Sequence[actions.PlayAction],
 ) -> actions.PlayAction:
     node = run_search(game_state, rng, search_config)
-    candidate_discards = list(node.actions)
-    if not candidate_discards or candidate_discards[0] is None:
-        hand_cards = encoding.cards_from_mask(game_state.players[player_index].hand_mask)
-        if not hand_cards:
-            raise RuntimeError("hand unexpectedly empty during benchmark search selection")
-        chosen_discard = hand_cards[0]
-    else:
+    candidate_actions = list(node.actions)
+    if candidate_actions and candidate_actions[0] is not None:
         chosen_index = node.best_action_index()
-        chosen_discard = cast(int, candidate_discards[chosen_index])
+        chosen = candidate_actions[chosen_index]
+        if isinstance(chosen, actions.PlayAction):
+            return chosen
 
-    matching = [action for action in play_actions if action.discard == chosen_discard]
-    if matching:
-        for action in matching:
-            if action.lay_down and action.sarf_moves:
-                return action
-        for action in matching:
-            if action.sarf_moves:
-                return action
-        for action in matching:
-            if action.lay_down:
-                return action
-        return matching[0]
+    hand_cards = encoding.cards_from_mask(game_state.players[player_index].hand_mask)
+    if not hand_cards:
+        return play_actions[0]
+    fallback_discard = hand_cards[0]
+    for action in play_actions:
+        if action.discard == fallback_discard:
+            return action
     return play_actions[0]
 
 

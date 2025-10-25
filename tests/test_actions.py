@@ -199,3 +199,107 @@ def test_apply_play_action_invokes_laydown(monkeypatch: pytest.MonkeyPatch) -> N
     actions.apply_play_action(game_state, 0, play_action)
 
     assert "lay" in called and "trash" in called
+
+
+def test_rank_discard_avoids_feeding_next_player_sarf() -> None:
+    danger_card = encoding.encode_standard_card(0, 8, 0)  # 9 of spades
+    safe_card = encoding.encode_standard_card(3, 1, 0)  # 2 of clubs
+
+    config = state.KonkanConfig(num_players=2, dealer_index=0, hand_size=2)
+    public = state.PublicState(
+        draw_pile=[],
+        trash_pile=[],
+        turn_index=3,
+        dealer_index=0,
+        current_player_index=0,
+    )
+
+    player0 = state.PlayerState(hand_mask=encoding.mask_from_cards([danger_card, safe_card]))
+    player0.phase = state.TurnPhase.AWAITING_TRASH
+
+    player1 = state.PlayerState(hand_mask=0)
+    player1.has_come_down = True
+
+    run_cards = [
+        encoding.encode_standard_card(0, 5, 0),
+        encoding.encode_standard_card(0, 6, 0),
+        encoding.encode_standard_card(0, 7, 0),
+    ]
+    mask = encoding.mask_from_cards(run_cards)
+    mask_hi, mask_lo = encoding.split_mask(mask)
+
+    game_state = state.KonkanState(
+        player_to_act=0,
+        turn_index=3,
+        deck=np.zeros(0, dtype=np.uint16),
+        deck_top=0,
+        trash=[],
+        hands=[],
+        table=[
+            state.MeldOnTable(
+                mask_hi=mask_hi,
+                mask_lo=mask_lo,
+                cards=list(run_cards),
+                owner=1,
+                kind=1,
+                has_joker=False,
+                points=encoding.points_from_mask(mask),
+                is_four_set=False,
+            )
+        ],
+        public=public,
+        highest_table_points=0,
+        first_player_has_discarded=True,
+        phase=rules.TurnPhase.PLAY,
+        config=config,
+        players=[player0, player1],
+    )
+
+    ranked = actions._rank_discard_candidates(
+        [danger_card, safe_card], state=game_state, player_index=0
+    )
+
+    assert ranked[0] == safe_card
+    assert ranked[-1] == danger_card
+
+
+def test_rank_discard_prefers_isolated_high_cards_over_run_links() -> None:
+    five_club_a = encoding.encode_standard_card(0, 4, 0)
+    five_club_b = encoding.encode_standard_card(0, 4, 1)
+    six_club = encoding.encode_standard_card(0, 5, 0)
+    queen_diamond = encoding.encode_standard_card(2, 10, 0)
+
+    config = state.KonkanConfig(num_players=1, dealer_index=0, hand_size=4)
+    public = state.PublicState(
+        draw_pile=[],
+        trash_pile=[],
+        turn_index=1,
+        dealer_index=0,
+        current_player_index=0,
+    )
+
+    player = state.PlayerState(hand_mask=encoding.mask_from_cards([five_club_a, five_club_b, six_club, queen_diamond]))
+    player.phase = state.TurnPhase.AWAITING_TRASH
+
+    game_state = state.KonkanState(
+        player_to_act=0,
+        turn_index=1,
+        deck=np.zeros(0, dtype=np.uint16),
+        deck_top=0,
+        trash=[],
+        hands=[],
+        table=[],
+        public=public,
+        highest_table_points=0,
+        first_player_has_discarded=True,
+        phase=rules.TurnPhase.PLAY,
+        config=config,
+        players=[player],
+    )
+
+    ranked = actions._rank_discard_candidates(
+        [five_club_a, five_club_b, six_club, queen_diamond], state=game_state, player_index=0
+    )
+
+    assert ranked[0] == queen_diamond
+    assert ranked.index(six_club) > ranked.index(queen_diamond)

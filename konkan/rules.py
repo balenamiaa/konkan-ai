@@ -7,6 +7,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Final, Iterable, Sequence, cast
 
 from . import encoding, melds
+from .melds import CoverResultProtocol
 
 SET_KIND = 0
 RUN_KIND = 1
@@ -270,8 +271,13 @@ def can_player_come_down(state: "KonkanState", player_index: int) -> bool:
     return encoding.points_from_mask(player.hand_mask) >= threshold
 
 
-def lay_down(state: "KonkanState", player_index: int) -> LayDownResult:
-    """Mark the player as having come down and return the lay-down summary."""
+def lay_down(state: "KonkanState", player_index: int, *, reserve_card: int | None = None) -> LayDownResult:
+    """Mark the player as having come down and return the lay-down summary.
+
+    ``reserve_card`` may be provided to prefer keeping a specific card in the
+    player's hand (for the eventual discard). If excluding that card prevents
+    the player from meeting the threshold, the reserve request is ignored.
+    """
 
     try:
         config, players, public = _resolve_runtime_components(state)
@@ -286,26 +292,51 @@ def lay_down(state: "KonkanState", player_index: int) -> LayDownResult:
     if public.highest_table_points > 0:
         threshold = max(threshold, public.highest_table_points + 1)
 
-    mask_hi, mask_lo = encoding.split_mask(player.hand_mask)
-    cover = melds.best_cover_to_threshold(mask_hi, mask_lo, threshold)
-    total_points = cover.total_points
+    original_mask = player.hand_mask
+    attempts: list[tuple[int, bool]] = []  # (mask_without_reserve, reserve_applied)
+    if reserve_card is not None and encoding.has_card(original_mask, reserve_card):
+        attempts.append((encoding.remove_card(original_mask, reserve_card), True))
+    attempts.append((original_mask, False))
+
     used_mask_int = 0
-    if total_points >= threshold:
-        for meld in cast(Iterable[Any], cover.melds):
-            mask_hi = int(getattr(meld, "mask_hi", 0))
-            mask_lo = int(getattr(meld, "mask_lo", 0))
-            used_mask_int |= (mask_hi << 64) | mask_lo
-    else:
-        fallback_points = encoding.points_from_mask(player.hand_mask)
-        if fallback_points < threshold:
-            raise RuntimeError("player does not meet the coming-down threshold")
-        used_mask_int = player.hand_mask
-        total_points = fallback_points
+    total_points = 0
+    cover: CoverResultProtocol | None = None
+    strict_solver = getattr(melds, "HAVE_NATIVE_SOLVER", False) and threshold >= DEFAULT_THRESHOLDS.base
+
+    for mask_candidate, _reserve_applied in attempts:
+        mask_hi_candidate, mask_lo_candidate = encoding.split_mask(mask_candidate)
+        cover_candidate = melds.best_cover_to_threshold(mask_hi_candidate, mask_lo_candidate, threshold)
+        total_points_candidate = cover_candidate.total_points
+        used_mask_candidate = 0
+        chosen_cover: CoverResultProtocol | None
+        if total_points_candidate >= threshold:
+            for meld_entry in cast(Iterable[Any], cover_candidate.melds):
+                mask_hi_entry = int(getattr(meld_entry, "mask_hi", 0))
+                mask_lo_entry = int(getattr(meld_entry, "mask_lo", 0))
+                used_mask_candidate |= (mask_hi_entry << 64) | mask_lo_entry
+            chosen_cover = cover_candidate
+        else:
+            if strict_solver:
+                continue
+            fallback_points = encoding.points_from_mask(mask_candidate)
+            if fallback_points < threshold:
+                continue
+            total_points_candidate = fallback_points
+            used_mask_candidate = mask_candidate
+            chosen_cover = None
+
+        used_mask_int = used_mask_candidate
+        total_points = total_points_candidate
+        cover = chosen_cover
+        break
+
+    if used_mask_int == 0:
+        raise RuntimeError("player does not meet the coming-down threshold")
 
     deadwood_mask = player.hand_mask & ~used_mask_int
 
     table_entries: list = []
-    if total_points >= threshold and getattr(cover, "melds", None):
+    if cover is not None and total_points >= threshold and getattr(cover, "melds", None):
         for native_meld in cast(Iterable[Any], cover.melds):
             mask_hi_native = int(getattr(native_meld, "mask_hi", 0))
             mask_lo_native = int(getattr(native_meld, "mask_lo", 0))
@@ -338,7 +369,7 @@ def lay_down(state: "KonkanState", player_index: int) -> LayDownResult:
     player.hand_mask = deadwood_mask
     state.table.extend(table_entries)
 
-    if total_points >= threshold and getattr(cover, "melds", None):
+    if cover is not None and total_points >= threshold and getattr(cover, "melds", None):
         laid_points_total = int(total_points)
     else:
         laid_points_total = encoding.points_from_mask(player.laid_mask)
@@ -481,12 +512,64 @@ def _validate_meld(cards: list[int], expected_kind: int) -> bool:
     return False
 
 
+def _validate_joker_extension(cards: list[int], expected_kind: int) -> bool:
+    if _validate_meld(cards, expected_kind):
+        return True
+
+    joker_count = sum(1 for card in cards if card in encoding.JOKER_IDS)
+    if joker_count == 0:
+        return False
+
+    natural_cards = [card for card in cards if card not in encoding.JOKER_IDS]
+    if not natural_cards:
+        return False
+
+    if expected_kind == SET_KIND:
+        rank_indices = {encoding.decode_id(card).rank_idx for card in natural_cards}
+        if len(rank_indices) > 1:
+            return False
+        suits = {encoding.decode_id(card).suit_idx for card in natural_cards}
+        if len(suits) != len(natural_cards):
+            return False
+        return True
+
+    # RUN_KIND fallback validation
+    if len(cards) < 3:
+        return False
+
+    suits = {encoding.decode_id(card).suit_idx for card in natural_cards}
+    if len(suits) != 1:
+        return False
+
+    ranks = sorted(encoding.decode_id(card).rank_idx for card in natural_cards)
+    prev = ranks[0]
+    used_jokers = 0
+    for rank in ranks[1:]:
+        gap = rank - prev - 1
+        if gap < 0:
+            return False
+        used_jokers += gap
+        if used_jokers > joker_count:
+            return False
+        prev = rank
+
+    return True
+
+
 def _assign_meld_cards(meld, cards: list[int]) -> None:
     mask = encoding.mask_from_cards(cards)
     mask_hi, mask_lo = encoding.split_mask(mask)
     meld.cards = list(cards)
     meld.mask_hi = mask_hi
     meld.mask_lo = mask_lo
+    meld.has_joker = any(card in encoding.JOKER_IDS for card in cards)
+    if meld.kind == SET_KIND:
+        natural_suits = {
+            encoding.decode_id(card).suit_idx for card in cards if card not in encoding.JOKER_IDS
+        }
+        meld.is_four_set = len(cards) == 4 and not meld.has_joker and len(natural_suits) == 4
+    else:
+        meld.is_four_set = False
     meld.has_joker = any(card in encoding.JOKER_IDS for card in cards)
     if cards:
         kind = meld.kind
@@ -581,32 +664,33 @@ def sarf_card(
         raise RuntimeError("cannot modify sealed set")
 
     decoded = encoding.decode_id(card_identifier)
+    is_joker = decoded.is_joker
+
     if meld.kind == SET_KIND:
-        if decoded.is_joker:
-            raise RuntimeError("cannot sarf joker into set")
-        base_ranks = [encoding.decode_id(card).rank_idx for card in meld.cards if card not in encoding.JOKER_IDS]
-        if base_ranks and decoded.rank_idx not in base_ranks:
-            raise RuntimeError("rank mismatch for set")
-        existing_suits = {
-            encoding.decode_id(card).suit_idx
-            for card in meld.cards
-            if card not in encoding.JOKER_IDS
-        }
-        if decoded.suit_idx in existing_suits:
-            raise RuntimeError("duplicate suit not allowed in set")
+        if not is_joker:
+            base_ranks = [
+                encoding.decode_id(card).rank_idx for card in meld.cards if card not in encoding.JOKER_IDS
+            ]
+            if base_ranks and decoded.rank_idx not in base_ranks:
+                raise RuntimeError("rank mismatch for set")
+            existing_suits = {
+                encoding.decode_id(card).suit_idx
+                for card in meld.cards
+                if card not in encoding.JOKER_IDS
+            }
+            if decoded.suit_idx in existing_suits:
+                raise RuntimeError("duplicate suit not allowed in set")
     else:  # run
-        base_suits = {
-            encoding.decode_id(card).suit_idx
-            for card in meld.cards
-            if card not in encoding.JOKER_IDS
-        }
-        if base_suits and decoded.suit_idx not in base_suits:
-            raise RuntimeError("suit mismatch for run")
+        if not is_joker:
+            base_suits = {
+                encoding.decode_id(card).suit_idx
+                for card in meld.cards
+                if card not in encoding.JOKER_IDS
+            }
+            if base_suits and decoded.suit_idx not in base_suits:
+                raise RuntimeError("suit mismatch for run")
 
-    if decoded.is_joker:
-        raise RuntimeError("cannot sarf joker without swap target")
-
-    if any(card in encoding.JOKER_IDS for card in meld.cards):
+    if not is_joker and any(card in encoding.JOKER_IDS for card in meld.cards):
         for index, table_card in enumerate(meld.cards):
             if table_card in encoding.JOKER_IDS:
                 candidate_cards = list(meld.cards)
@@ -621,8 +705,12 @@ def sarf_card(
                     return
 
     candidate_cards = list(meld.cards) + [card_identifier]
-    if not _validate_meld(candidate_cards, meld.kind):
-        raise RuntimeError("card does not extend meld")
+    if is_joker:
+        if not _validate_joker_extension(candidate_cards, meld.kind):
+            raise RuntimeError("card does not extend meld")
+    else:
+        if not _validate_meld(candidate_cards, meld.kind):
+            raise RuntimeError("card does not extend meld")
 
     player.hand_mask = encoding.remove_card(player.hand_mask, card_identifier)
     _assign_meld_cards(meld, candidate_cards)

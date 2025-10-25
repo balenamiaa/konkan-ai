@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Sequence
 
 from .. import encoding, melds
+from ..actions import PlayAction
+from ..evaluation import analyze_hand
+from ..threats import discard_feeds_next_player_sarf
 from ..state import KonkanState, PublicState
 
 
@@ -37,7 +40,12 @@ def _synergy_score(card_identifier: int, hand_cards: Sequence[int]) -> int:
     return duplicates + run_neighbors
 
 
-def evaluate_actions(state: KonkanState, actions: Sequence[object]) -> list[float]:
+def evaluate_actions(
+    state: KonkanState,
+    actions: Sequence[object],
+    *,
+    demand_samples: int = 1,
+) -> list[float]:
     """Return heuristic priors that prefer safe, low-deadwood discards."""
 
     if not actions:
@@ -63,20 +71,53 @@ def evaluate_actions(state: KonkanState, actions: Sequence[object]) -> list[floa
         )
         baseline_used_mask |= mask
 
+    metrics_by_card = analyze_hand(
+        state,
+        player_index,
+        threshold=threshold,
+        demand_samples=max(1, demand_samples),
+    )
+
     scores: list[float] = []
     for action in actions:
-        if not isinstance(action, int):
+        if isinstance(action, PlayAction):
+            discard_card = action.discard
+            lay_down_flag = action.lay_down
+            sarf_cards = [card for _, card in action.sarf_moves]
+        elif isinstance(action, int):
+            discard_card = action
+            lay_down_flag = False
+            sarf_cards = []
+        else:
             scores.append(1.0)
             continue
 
+        mask_remaining = player.hand_mask
+        cover = None
+        if lay_down_flag:
+            mask_hi_initial, mask_lo_initial = encoding.split_mask(mask_remaining)
+            cover = melds.best_cover_to_threshold(mask_hi_initial, mask_lo_initial, threshold)
+            if cover.total_points >= threshold:
+                used_mask = 0
+                for meld in cover.melds:
+                    used_mask |= encoding.combine_mask(
+                        int(getattr(meld, "mask_hi", 0)), int(getattr(meld, "mask_lo", 0))
+                    )
+                mask_remaining &= ~used_mask
+            else:
+                mask_remaining = 0
+
+        for card_id in sarf_cards:
+            mask_remaining = encoding.remove_card(mask_remaining, card_id, ignore_missing=True)
+
         try:
-            mask_after = encoding.remove_card(player.hand_mask, action)
+            mask_remaining = encoding.remove_card(mask_remaining, discard_card)
         except ValueError:
             scores.append(0.5)
             continue
 
-        mask_hi, mask_lo = encoding.split_mask(mask_after)
-        cover = melds.best_cover_to_threshold(mask_hi, mask_lo, threshold)
+        mask_hi, mask_lo = encoding.split_mask(mask_remaining)
+        cover = cover or melds.best_cover_to_threshold(mask_hi, mask_lo, threshold)
 
         used_mask = 0
         for meld in cover.melds:
@@ -85,16 +126,16 @@ def evaluate_actions(state: KonkanState, actions: Sequence[object]) -> list[floa
             )
             used_mask |= mask
 
-        deadwood_mask = mask_after & ~used_mask
+        deadwood_mask = mask_remaining & ~used_mask
         deadwood_points = encoding.points_from_mask(deadwood_mask)
 
-        card_points = float(encoding.card_points(action))
-        synergy = float(_synergy_score(action, hand_cards))
-        card_in_baseline = (baseline_used_mask >> action) & 1 == 1
-        laydown_ready = cover.total_points >= threshold
+        card_points = float(encoding.card_points(discard_card))
+        synergy = float(_synergy_score(discard_card, hand_cards))
+        card_in_baseline = (baseline_used_mask >> discard_card) & 1 == 1
+        laydown_ready = lay_down_flag or cover.total_points >= threshold
 
         score = -float(deadwood_points)
-        score -= 0.6 * card_points
+        score -= 0.45 * card_points
         if card_in_baseline:
             score -= 25.0
         score += 4.0 * synergy
@@ -102,8 +143,21 @@ def evaluate_actions(state: KonkanState, actions: Sequence[object]) -> list[floa
             score += 8.0
         if player.has_come_down:
             score += 3.0
+        if lay_down_flag:
+            score += 12.0
+        if sarf_cards:
+            score += 5.0 * len(sarf_cards)
 
-        decoded = encoding.decode_id(action)
+        decoded = encoding.decode_id(discard_card)
+        metrics = metrics_by_card.get(discard_card)
+        if metrics is not None:
+            score -= metrics.keep_value() * 1.2
+            if metrics.near_run:
+                score += 2.0
+
+        if discard_feeds_next_player_sarf(state, player_index, discard_card):
+            score -= 80.0
+
         if decoded.is_joker:
             score -= 40.0
 

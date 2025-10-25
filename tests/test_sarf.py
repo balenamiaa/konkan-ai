@@ -113,3 +113,35 @@ def test_can_sarf_card_rejects_invalid() -> None:
     )
 
     assert not rules.can_sarf_card(game_state, 0, 0, hand[0])
+
+
+def test_sarf_card_allows_joker_extension() -> None:
+    joker = encoding.JOKER_IDS[0]
+    hand = [joker]
+    game_state = _base_state(hand)
+
+    run_cards = [
+        encoding.encode_standard_card(0, 4, 0),
+        encoding.encode_standard_card(0, 5, 0),
+        encoding.encode_standard_card(0, 6, 0),
+    ]
+    mask = encoding.mask_from_cards(run_cards)
+    mask_hi, mask_lo = encoding.split_mask(mask)
+    game_state.table.append(
+        state.MeldOnTable(
+            mask_hi=mask_hi,
+            mask_lo=mask_lo,
+            cards=list(run_cards),
+            owner=1,
+            kind=RUN_KIND,
+            has_joker=False,
+            points=encoding.points_from_mask(mask),
+            is_four_set=False,
+        )
+    )
+
+    assert rules.can_sarf_card(game_state, 0, 0, joker)
+    rules.sarf_card(game_state, 0, 0, joker)
+
+    assert joker not in encoding.cards_from_mask(game_state.players[0].hand_mask)
+    assert joker in game_state.table[0].cards

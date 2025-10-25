@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ranj — Make Revenue Run</title>
+  <meta name="description" content="Ranj is the AI growth engine that turns traffic into paying customers—automating outreach, qualifying leads, and optimizing conversions in real time." />
+  <meta name="theme-color" content="#0c0b14" />
+  <meta property="og:title" content="Ranj — Make Revenue Run" />
+  <meta property="og:description" content="The eye-candy AI growth engine built for conversion." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://dummyimage.com/1200x630/0c0b14/ffffff&text=Ranj" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b0b12;
+      --bg2:#0c0b14;
+      --text:#ecf0ff;
+      --muted:#a9b0c6;
+      --card:#10101a;
+      --glass:rgba(255,255,255,0.08);
+      --stroke:rgba(255,255,255,0.12);
+      --accentA:#ff3cac;
+      --accentB:#784ba0;
+      --accentC:#2b86c5;
+      --accentD:#00E6A8;
+      --danger:#ff6b6b;
+      --warning:#fbd38d;
+      --success:#5df2a7;
+      --shadow:0 10px 40px rgba(0,0,0,.5), 0 2px 10px rgba(0,0,0,.3);
+      --radius:18px;
+      --glow:0 0 20px rgba(255,60,172,.5), 0 0 60px rgba(43,134,197,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans", "Apple Color Emoji","Segoe UI Emoji", "Segoe UI Symbol";
+      color:var(--text);
+      background:radial-gradient(1200px 800px at 15% -10%, #211c3a 0%, transparent 60%), radial-gradient(900px 700px at 90% 0%, #112341 0%, transparent 60%), linear-gradient(180deg, #0b0b12 0%, #0b0b12 30%, #0b0b12 100%);
+      overflow-x:hidden;
+    }
+    /* Aurora background */
+    .aurora{
+      position:fixed; inset:0; pointer-events:none; z-index:-2; filter:saturate(110%) blur(30px);
+      background:
+        radial-gradient(650px 650px at 15% 15%, rgba(255,60,172,.20), transparent 60%),
+        radial-gradient(800px 800px at 85% 20%, rgba(43,134,197,.20), transparent 60%),
+        radial-gradient(700px 700px at 60% 80%, rgba(0,230,168,.18), transparent 60%);
+      mix-blend-mode:screen;
+      animation:auroraShift 18s ease-in-out infinite alternate;
+    }
+    @keyframes auroraShift{
+      0%{transform:translateY(0) scale(1)}
+      50%{transform:translateY(-2%) scale(1.02)}
+      100%{transform:translateY(1%) scale(1.01)}
+    }
+    /* Grid sheen */
+    .grid-sheen:before{
+      content:""; position:fixed; inset:-10%; z-index:-3; opacity:.08; pointer-events:none;
+      background:
+        linear-gradient(120deg, rgba(255,255,255,.04) 0%, rgba(255,255,255,0) 15%, rgba(255,255,255,.04) 30%, rgba(255,255,255,0) 45%, rgba(255,255,255,.04) 60%, rgba(255,255,255,0) 75%, rgba(255,255,255,.04) 90%),
+        repeating-linear-gradient(0deg, rgba(255,255,255,.06) 0 1px, transparent 1px 60px),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 1px, transparent 1px 60px);
+      transform:skewY(-1deg);
+      animation:shine 22s linear infinite;
+    }
+    @keyframes shine{
+      0%{background-position:0 0, 0 0, 0 0}
+      100%{background-position:200% 0, 0 0, 0 0}
+    }
+
+    /* Nav */
+    .nav{
+      position:fixed; top:16px; left:50%; transform:translateX(-50%);
+      width:min(1100px,94%); z-index:1000; backdrop-filter: blur(16px) saturate(120%); background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.06));
+      border:1px solid var(--stroke); border-radius:16px; box-shadow:var(--shadow);
+      display:flex; align-items:center; justify-content:space-between; padding:12px 16px; transition:all .35s ease;
+    }
+    .nav.shrink{padding:8px 14px; background:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.05)); transform:translateX(-50%) translateY(-4px)}
+    .logo{
+      display:flex; align-items:center; gap:10px; font-family: "Space Grotesk", Inter, sans-serif; font-weight:800; letter-spacing:.2px; font-size:20px;
+    }
+    .logo-badge{
+      width:34px; height:34px; border-radius:12px; background:conic-gradient(from 180deg at 50% 50%, var(--accentA), var(--accentB), var(--accentC), var(--accentA));
+      box-shadow:var(--glow); display:grid; place-items:center; color:#fff; font-weight:900; text-shadow:0 2px 10px rgba(0,0,0,.3);
+    }
+    .logo span.gradient{
+      background:linear-gradient(90deg, var(--accentA), var(--accentC), var(--accentD)); -webkit-background-clip:text; background-clip:text; color:transparent
+    }
+    .nav a{
+      color:var(--text); text-decoration:none; font-weight:600; font-size:14px; opacity:.92; transition:opacity .2s, transform .2s;
+      padding:10px 12px; border-radius:10px;
+    }
+    .nav a:hover{opacity:1; transform:translateY(-1px)}
+    .nav-links{display:flex; gap:2px; align-items:center}
+    .btn{
+      appearance:none; border:none; cursor:pointer; font-weight:800; letter-spacing:.2px; border-radius:12px; padding:12px 18px; color:#0a0a0f;
+      background:linear-gradient(90deg, #00E6A8, #2b86c5, #ff3cac);
+      background-size:200% 200%; box-shadow:0 10px 30px rgba(0,230,168,.25), 0 5px 18px rgba(43,134,197,.25);
+      transition:transform .15s ease, box-shadow .2s ease, filter .2s; position:relative; overflow:hidden;
+    }
+    .btn.glow::after{
+      content:""; position:absolute; inset:-2px; border-radius:13px; padding:1px; background:linear-gradient(90deg, rgba(0,230,168,.6), rgba(43,134,197,.6), rgba(255,60,172,.6));
+      -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite:xor; mask-composite:exclude; animation:borderShift 5s linear infinite;
+    }
+    @keyframes borderShift{
+      0%{filter:hue-rotate(0deg)} 100%{filter:hue-rotate(360deg)}
+    }
+    .btn:hover{transform:translateY(-2px) scale(1.02); box-shadow:0 16px 40px rgba(0,230,168,.30), 0 8px 24px rgba(43,134,197,.30)}
+    .btn.secondary{background:linear-gradient(90deg, rgba(255,255,255,.12), rgba(255,255,255,.08)); color:var(--text); box-shadow:none; border:1px solid var(--stroke)}
+    .btn.small{padding:10px 14px; font-size:14px}
+
+    /* Hero */
+    header.hero{
+      position:relative; min-height:100vh; display:grid; place-items:center; padding:160px 0 120px;
+    }
+    .hero-inner{width:min(1200px,92%); display:grid; grid-template-columns:1.1fr .9fr; gap:36px; align-items:center}
+    .eyebrow{
+      display:inline-flex; align-items:center; gap:10px; font-weight:700; color:#a7ffe4; letter-spacing:.12em; text-transform:uppercase; font-size:12px;
+      background:rgba(0,230,168,.12); border:1px solid rgba(0,230,168,.35); border-radius:999px; padding:8px 12px; backdrop-filter: blur(6px);
+    }
+    h1.title{
+      font-family:"Space Grotesk","Inter",sans-serif; font-size: clamp(40px, 8vw, 82px); line-height:1.02; margin:16px 0 10px;
+      background:conic-gradient(from 200deg at 50% 50%, #fff 0%, #b4f5ff 15%, #fff 30%, #ffd1ef 45%, #ffffff 60%, #c2ffe9 75%, #ffffff 90%);
+      -webkit-background-clip:text; background-clip:text; color:transparent; letter-spacing:-.02em; text-shadow:0 2px 30px rgba(255,255,255,.1);
+      filter:drop-shadow(0 6px 25px rgba(0,230,168,.05));
+    }
+    .subtitle{color:var(--muted); font-size: clamp(16px, 2.2vw, 20px); line-height:1.7; margin-bottom:24px}
+    .cta-row{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    .meta{display:flex; gap:16px; align-items:center; color:#bcd0ff; font-size:13px; opacity:.9}
+    .stars{color:#ffd166}
+    .hero-visual{
+      position:relative; perspective:1200px; transform-style:preserve-3d; min-height:520px;
+    }
+    .glass-card{
+      position:absolute; inset:auto; top:0; right:0; left:0; margin:auto; width:min(540px, 92%); height:380px;
+      background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+      border:1px solid var(--stroke); border-radius:24px; box-shadow:var(--shadow), 0 0 120px rgba(43,134,197,.18);
+      backdrop-filter: blur(14px) saturate(140%); transform:rotateY(0) rotateX(0) translateZ(0);
+      transition:transform .15s ease;
+      overflow:hidden;
+    }
+    .glass-card .header{
+      display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid rgba(255,255,255,.08); background:rgba(10,10,16,.35)
+    }
+    .glass-card .dots{display:flex; gap:8px}
+    .dot{width:10px; height:10px; border-radius:999px}
+    .dot.red{background:#ff5f56}.dot.yellow{background:#ffbd2e}.dot.green{background:#27c93f}
+    .glass-card .body{padding:18px; display:grid; grid-template-columns:1.1fr .9fr; gap:16px}
+    /* Fake UI skeleton */
+    .panel{background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:14px}
+    .list .item{display:flex; justify-content:space-between; align-items:center; padding:12px; border-radius:12px; margin-bottom:10px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08)}
+    .tag{font-size:12px; padding:6px 10px; border-radius:999px; background:rgba(0,230,168,.14); color:#9fffe0; border:1px solid rgba(0,230,168,.38)}
+    .spark{
+      position:absolute; inset:-20%; background:
+      radial-gradient(300px 300px at 20% 40%, rgba(255,60,172,.22), transparent 60%),
+      radial-gradient(300px 300px at 80% 60%, rgba(43,134,197,.22), transparent 60%);
+      mix-blend-mode:screen; filter:blur(20px); animation:floater 9s ease-in-out infinite alternate;
+      pointer-events:none;
+    }
+    @keyframes floater{
+      0%{transform:translate(0,0)} 50%{transform:translate(1%, -2%)} 100%{transform:translate(-1%, 2%)}
+    }
+
+    /* Marquee logos */
+    .marquee{position:relative; overflow:hidden; padding:26px 0; border-top:1px solid var(--stroke); border-bottom:1px solid var(--stroke); background:rgba(255,255,255,.02)}
+    .marquee .track{
+      display:flex; gap:36px; width: max-content; animation:scrollX 30s linear infinite; will-change:transform; align-items:center
+    }
+    .brand{
+      padding:10px 16px; border:1px solid rgba(255,255,255,.1); border-radius:999px; background:rgba(255,255,255,.05);
+      color:#dfe8ff; font-weight:700; letter-spacing:.6px; text-transform:uppercase; font-size:12px; opacity:.8
+    }
+    .marquee:hover .track{animation-play-state:paused}
+    @keyframes scrollX{to{transform:translateX(-50%)}}
+
+    /* Feature grid */
+    section{padding:100px 0}
+    .wrap{width:min(1200px,92%); margin:0 auto}
+    .section-title{font-family:"Space Grotesk", Inter, sans-serif; font-size: clamp(26px, 4vw, 44px); margin:0 0 14px}
+    .section-sub{color:var(--muted); margin-bottom:26px}
+    .grid{
+      display:grid; gap:18px;
+      grid-template-columns:repeat(3, 1fr);
+    }
+    .card{
+      position:relative; background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06)); border:1px solid var(--stroke);
+      border-radius:20px; padding:22px; box-shadow:var(--shadow); backdrop-filter: blur(10px) saturate(140%); overflow:hidden;
+      transform:translateY(10px); opacity:0; transition:transform .6s ease, opacity .6s ease;
+    }
+    .card.in{transform:translateY(0); opacity:1}
+    .icon{
+      width:46px; height:46px; display:grid; place-items:center; border-radius:12px; margin-bottom:12px;
+      background:linear-gradient(135deg, rgba(0,230,168,.25), rgba(43,134,197,.25)); border:1px solid rgba(255,255,255,.16); box-shadow:0 10px 30px rgba(0,230,168,.2)
+    }
+    .card h3{margin:0 0 8px}
+    .card p{margin:0; color:var(--muted)}
+    .card .shine{
+      content:""; position:absolute; right:-30%; top:-20%; width:60%; height:200%;
+      background:radial-gradient(closest-side, rgba(255,255,255,.20), transparent 60%); transform:rotate(25deg);
+      animation:shineDrift 9s ease-in-out infinite alternate;
+    }
+    @keyframes shineDrift{to{transform:rotate(25deg) translateY(10%)}}
+
+    /* Parallax orbs */
+    .orbs{position:absolute; inset:0; pointer-events:none; z-index:-1}
+    .orb{
+      position:absolute; width:280px; height:280px; border-radius:50%;
+      filter:blur(10px) saturate(130%); opacity:.18; mix-blend-mode:screen; will-change:transform;
+      background:radial-gradient(circle at 30% 30%, var(--accentA), transparent 60%), radial-gradient(circle at 70% 70%, var(--accentC), transparent 55%);
+      box-shadow:0 0 140px rgba(255,60,172,.3), 0 0 160px rgba(43,134,197,.25) inset;
+    }
+    .orb.green{background:radial-gradient(circle at 30% 30%, var(--accentD), transparent 60%), radial-gradient(circle at 70% 70%, var(--accentC), transparent 55%)}
+
+    /* Stats */
+    .stats{
+      display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:26px
+    }
+    .stat{
+      background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.05));
+      border:1px solid var(--stroke); border-radius:16px; padding:22px; text-align:center; box-shadow:var(--shadow)
+    }
+    .stat .num{font-weight:900; font-size: clamp(28px, 6vw, 46px); background:linear-gradient(90deg, #fff, #b0ffe7, #e7c7ff); -webkit-background-clip:text; color:transparent}
+    .stat .label{color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; font-size:12px}
+
+    /* Steps */
+    .steps{display:grid; grid-template-columns:repeat(3, 1fr); gap:18px}
+    .step{position:relative; border-radius:20px; overflow:hidden; background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06)); border:1px solid var(--stroke); box-shadow:var(--shadow)}
+    .step .media{height:200px; background:radial-gradient(600px 200px at 50% -20%, rgba(255,60,172,.25), rgba(43,134,197,.18)); display:grid; place-items:center}
+    .step .body{padding:18px}
+    .badge{
+      position:absolute; top:12px; left:12px; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.22); padding:8px 12px; border-radius:999px; font-weight:800; font-size:12px
+    }
+
+    /* Pricing */
+    .pricing-toggle{display:flex; align-items:center; gap:12px; margin-bottom:16px}
+    .switch{position:relative; width:58px; height:30px; background:rgba(255,255,255,.12); border-radius:999px; border:1px solid var(--stroke); cursor:pointer}
+    .switch .knob{position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%; background:#fff; transition:left .25s ease}
+    .switch.active .knob{left:31px}
+    .price-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+    .price{
+      position:relative; overflow:hidden; border-radius:20px; border:1px solid var(--stroke); background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05)); box-shadow:var(--shadow)
+    }
+    .price .hdr{padding:18px; border-bottom:1px solid rgba(255,255,255,.08); display:flex; justify-content:space-between; align-items:center}
+    .price .body{padding:18px}
+    .price .money{font-weight:900; font-size: clamp(28px, 5vw, 42px)}
+    .price ul{padding:0; margin:14px 0 0; list-style:none}
+    .price li{display:flex; gap:10px; align-items:flex-start; padding:10px 0; color:#cfe2ff}
+    .price.best{background:linear-gradient(180deg, rgba(0,230,168,.16), rgba(255,255,255,.06))}
+    .ribbon{
+      position:absolute; right:-50px; top:14px; transform:rotate(35deg); background:linear-gradient(90deg, var(--accentD), var(--accentC)); color:#04151f; font-weight:900; letter-spacing:.06em; padding:8px 60px; box-shadow:var(--glow)
+    }
+
+    /* Testimonials */
+    .carousel{position:relative; overflow:hidden}
+    .row{
+      display:flex; gap:18px; width:max-content; animation:scrollX 36s linear infinite; padding:6px 0
+    }
+    .t-card{
+      width:360px; background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.05)); border:1px solid var(--stroke); border-radius:18px; padding:18px; box-shadow:var(--shadow)
+    }
+    .t-head{display:flex; align-items:center; gap:12px; margin-bottom:8px}
+    .avatar{width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg, var(--accentA), var(--accentC)); box-shadow:0 0 0 3px rgba(255,255,255,.1)}
+    .role{color:var(--muted); font-size:13px}
+    .quote{color:#e8eeff}
+
+    /* FAQ */
+    .faq{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+    details{background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05)); border:1px solid var(--stroke); border-radius:14px; padding:14px 18px; box-shadow:var(--shadow)}
+    summary{cursor:pointer; font-weight:800; outline:none}
+    details p{color:#cbd6ff}
+
+    /* CTA Final */
+    .final-cta{
+      position:relative; border:1px solid var(--stroke); border-radius:24px; overflow:hidden; background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05)); box-shadow:var(--shadow);
+      padding:36px; text-align:center
+    }
+    .final-cta .bg{
+      position:absolute; inset:-20%; pointer-events:none; background:
+        radial-gradient(600px 200px at 50% 0%, rgba(0,230,168,.25), transparent 60%),
+        radial-gradient(500px 200px at 50% 100%, rgba(255,60,172,.22), transparent 60%);
+      filter:blur(10px); z-index:-1; animation:floater 10s ease-in-out infinite alternate
+    }
+    .cta-big{font-size: clamp(18px, 2.6vw, 22px); color:#d8fefe}
+
+    /* Scroll indicator */
+    .scroll-indicator{
+      position:absolute; bottom:22px; left:50%; transform:translateX(-50%); opacity:.75; display:flex; gap:10px; align-items:center; color:#cde7ff; font-size:12px; letter-spacing:.12em; text-transform:uppercase
+    }
+    .mouse{
+      width:22px; height:34px; border:2px solid rgba(255,255,255,.5); border-radius:12px; position:relative
+    }
+    .wheel{
+      position:absolute; top:6px; left:50%; transform:translateX(-50%); width:4px; height:6px; background:#fff; border-radius:2px; animation:wheel 1.6s ease-in-out infinite
+    }
+    @keyframes wheel{
+      0%{opacity:0; transform:translate(-50%,-2px)}
+      30%{opacity:1}
+      100%{opacity:0; transform:translate(-50%,10px)}
+    }
+
+    /* Reveal utility */
+    [data-animate]{opacity:0; transform:translateY(18px); transition:opacity .6s ease, transform .6s ease}
+    [data-animate].in{opacity:1; transform:translateY(0)}
+
+    /* Responsive */
+    @media (max-width: 1020px){
+      .hero-inner{grid-template-columns:1fr; gap:24px}
+      .glass-card{position:relative; height:auto}
+      .grid{grid-template-columns:1fr 1fr}
+      .steps{grid-template-columns:1fr}
+      .price-grid{grid-template-columns:1fr; gap:16px}
+      .stats{grid-template-columns:1fr 1fr}
+      .faq{grid-template-columns:1fr}
+    }
+    @media (max-width: 640px){
+      .grid{grid-template-columns:1fr}
+      .stats{grid-template-columns:1fr}
+      .nav{border-radius:12px}
+      .logo-badge{width:30px;height:30px}
+    }
+  </style>
+</head>
+<body class="grid-sheen">
+  <div class="aurora"></div>
+
+  <!-- NAV -->
+  <nav class="nav" id="nav">
+    <div class="logo">
+      <div class="logo-badge">R</div>
+      <div><span class="gradient">Ranj</span></div>
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#testimonials">Love</a>
+      <a href="#faq">FAQ</a>
+      <a href="#cta" class="btn small glow">Get Started</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero" id="home">
+    <div class="orbs">
+      <div class="orb" style="top:10%; left:-60px" data-parallax="-0.12"></div>
+      <div class="orb green" style="bottom:10%; right:-60px" data-parallax="0.15"></div>
+    </div>
+    <div class="hero-inner wrap">
+      <div data-animate>
+        <span class="eyebrow">New • AI Growth Engine</span>
+        <h1 class="title">Make revenue run <br />with Ranj</h1>
+        <p class="subtitle">Ranj turns traffic into paying customers—automating outreach, qualifying leads and optimizing conversions in real time across email, socials and on-site journeys.</p>
+        <div class="cta-row">
+          <a href="#pricing" class="btn glow">Start free</a>
+          <a href="#how" class="btn secondary">See how it works</a>
+          <div class="meta">
+            <span class="stars">★★★★★</span> 4.8/5 by 1,200+ teams
+          </div>
+        </div>
+      </div>
+      <div class="hero-visual" data-animate>
+        <div class="glass-card tilt" id="tilt">
+          <div class="spark"></div>
+          <div class="header">
+            <div class="dots">
+              <div class="dot red"></div>
+              <div class="dot yellow"></div>
+              <div class="dot green"></div>
+            </div>
+            <strong style="letter-spacing:.02em">Ranj Dashboard</strong>
+            <div class="tag">Live</div>
+          </div>
+          <div class="body">
+            <div class="panel">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                <strong>High-intent prospects</strong>
+                <span class="tag">+27% wk</span>
+              </div>
+              <div class="list">
+                <div class="item"><span>Segment: SaaS founders</span><span class="tag">Ready</span></div>
+                <div class="item"><span>Segment: E-comm ops</span><span class="tag">Hot</span></div>
+                <div class="item"><span>Segment: DevTools buyers</span><span class="tag">Active</span></div>
+                <div class="item"><span>Segment: Fintech leads</span><span class="tag">Warm</span></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+                <strong>Conversion Intelligence</strong>
+                <span class="tag">Auto</span>
+              </div>
+              <div style="display:grid; gap:10px">
+                <div style="height:90px; border-radius:12px; background:linear-gradient(135deg, rgba(0,230,168,.25), rgba(43,134,197,.16)); border:1px solid rgba(255,255,255,.14)"></div>
+                <div style="display:flex; gap:10px">
+                  <div style="height:60px; flex:1; border-radius:12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1)"></div>
+                  <div style="height:60px; flex:1; border-radius:12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="scroll-indicator">
+          <div class="mouse"><div class="wheel"></div></div> Scroll
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- LOGOS MARQUEE -->
+  <section class="marquee" aria-label="Trusted by">
+    <div class="track">
+      <span class="brand">ACME</span>
+      <span class="brand">LUMOS</span>
+      <span class="brand">HYPERKIT</span>
+      <span class="brand">NOVA LABS</span>
+      <span class="brand">ORBITAL</span>
+      <span class="brand">PRISM</span>
+      <span class="brand">CENTAUR</span>
+      <span class="brand">ZENSTACK</span>
+      <span class="brand">ACME</span>
+      <span class="brand">LUMOS</span>
+      <span class="brand">HYPERKIT</span>
+      <span class="brand">NOVA LABS</span>
+      <span class="brand">ORBITAL</span>
+      <span class="brand">PRISM</span>
+      <span class="brand">CENTAUR</span>
+      <span class="brand">ZENSTACK</span>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="wrap">
+      <h2 class="section-title" data-animate>Sell while you sleep</h2>
+      <p class="section-sub" data-animate>Ranj spots high-intent buyers, launches on-brand flows in minutes, and relentlessly optimizes to convert.</p>
+      <div class="grid">
+        <div class="card" data-animate>
+          <div class="shine"></div>
+          <div class="icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#a7ffe4" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l1.9 4.7L19 8l-4 3.2.9 5.1L12 14.6 8.1 16.3 9 11.2 5 8l5.1-1.3L12 2z"/></svg>
+          </div>
+          <h3>Predictive Targeting</h3>
+          <p>Pinpoint high-intent audiences across channels with zero guesswork.</p>
+        </div>
+        <div class="card" data-animate>
+          <div class="shine"></div>
+          <div class="icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#bcd6ff" xmlns="http://www.w3.org/2000/svg"><path d="M2 12l20-8-8 20-2-8-8-4z"/></svg>
+          </div>
+          <h3>Autopilot Campaigns</h3>
+          <p>Launch multi-channel flows in minutes—email, socials, and on-site.</p>
+        </div>
+        <div class="card" data-animate>
+          <div class="shine"></div>
+          <div class="icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#ffd166" xmlns="http://www.w3.org/2000/svg"><path d="M3 17h18v2H3v-2zm0-6h18v2H3V11zm0-6h18v2H3V5z"/></svg>
+          </div>
+          <h3>Conversion Intelligence</h3>
+          <p>Ranj runs constant experiments and converges on what sells.</p>
+        </div>
+        <div class="card" data-animate>
+          <div class="shine"></div>
+          <div class="icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#9fc9ff" xmlns="http://www.w3.org/2000/svg"><path d="M12 3l4 4-9 9H3v-4l9-9zM14 5l5 5-9 9h-5v-5l9-9z"/></svg>
+          </div>
+          <h3>1‑Click Integrations</h3>
+          <p>Plug into your CRM, email, analytics, and storefront in seconds.</p>
+        </div>
+        <div class="card" data-animate>
+          <div class="shine"></div>
+          <div class="icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#a7ffe4" xmlns="http://www.w3.org/2000/svg"><path d="M12 1l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-8.5L2 8h7z"/></svg>
+          </div>
+          <h3>Privacy‑First</h3>
+          <p>Consent-aware, cookieless signals and regional data controls.</p>
+        </div>
+        <div class="card" data-animate>
+          <div class="shine"></div>
+          <div class="icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#ffb3d9" xmlns="http://www.w3.org/2000/svg"><path d="M13 3a9 9 0 100 18 9 9 0 000-18zm-1 4h2v6h-2V7zm0 8h2v2h-2v-2z"/></svg>
+          </div>
+          <h3>Blazing Performance</h3>
+          <p>Lightweight by design. Fast insights, instant updates.</p>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat" data-animate>
+          <div class="num" data-countup="37">0%</div>
+          <div class="label">Avg. conversion uplift</div>
+        </div>
+        <div class="stat" data-animate>
+          <div class="num" data-countup="1200">0</div>
+          <div class="label">Teams growing with Ranj</div>
+        </div>
+        <div class="stat" data-animate>
+          <div class="num" data-countup="12">0x</div>
+          <div class="label">Faster campaign launch</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="wrap">
+      <h2 class="section-title" data-animate>From zero to revenue in hours</h2>
+      <p class="section-sub" data-animate>Connect your stack, train on your best customers, and let Ranj optimize towards purchase in real time.</p>
+      <div class="steps">
+        <div class="step" data-animate>
+          <div class="badge">Step 1</div>
+          <div class="media">
+            <svg width="100" height="100" viewBox="0 0 24 24" fill="#a7ffe4"><path d="M3 3h18v4H3V3zm0 7h18v4H3v-4zm0 7h18v4H3v-4z"/></svg>
+          </div>
+          <div class="body">
+            <h3>Connect</h3>
+            <p>CRM, email, storefront, ads. One switch. No heavy lifting.</p>
+          </div>
+        </div>
+        <div class="step" data-animate>
+          <div class="badge">Step 2</div>
+          <div class="media">
+            <svg width="100" height="100" viewBox="0 0 24 24" fill="#bcd6ff"><path d="M12 3C7 3 3 7 3 12s4 9 9 9 9-4 9-9-4-9-9-9zm1 13h-2v-2H7v-2h4V8h2v4h4v2h-4v4z"/></svg>
+          </div>
+          <div class="body">
+            <h3>Train</h3>
+            <p>Ranj learns from your best customers to predict the next ones.</p>
+          </div>
+        </div>
+        <div class="step" data-animate>
+          <div class="badge">Step 3</div>
+          <div class="media">
+            <svg width="100" height="100" viewBox="0 0 24 24" fill="#ffd166"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+          </div>
+          <div class="body">
+            <h3>Launch</h3>
+            <p>Deploy cross-channel flows with self-optimizing copy and timing.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section id="pricing">
+    <div class="wrap">
+      <h2 class="section-title" data-animate>Pricing that pays for itself</h2>
+      <p class="section-sub" data-animate>Start free. Scale as your revenue runs.</p>
+      <div class="pricing-toggle" data-animate>
+        <span style="color:#cfe2ff">Monthly</span>
+        <div class="switch" id="billSwitch" aria-label="Billing Toggle" role="switch" aria-checked="false" tabindex="0"><div class="knob"></div></div>
+        <span class="tag">Save 20% yearly</span>
+      </div>
+      <div class="price-grid">
+        <div class="price" data-animate>
+          <div class="hdr">
+            <strong>Starter</strong>
+            <span class="tag">Solo/SMB</span>
+          </div>
+          <div class="body">
+            <div class="money"><span class="currency">$</span><span class="amount" data-month="29" data-year="24">29</span><span class="period">/mo</span></div>
+            <ul>
+              <li>✔ 3,000 contacts</li>
+              <li>✔ Email + On-site flows</li>
+              <li>✔ 5 integrations</li>
+              <li>✔ Basic AI experiments</li>
+            </ul>
+            <div style="margin-top:16px"><a href="#cta" class="btn glow" style="width:100%; display:block; text-align:center">Start free</a></div>
+          </div>
+        </div>
+        <div class="price best" data-animate>
+          <div class="ribbon">Most Popular</div>
+          <div class="hdr">
+            <strong>Growth</strong>
+            <span class="tag">Scale-ups</span>
+          </div>
+          <div class="body">
+            <div class="money"><span class="currency">$</span><span class="amount" data-month="99" data-year="79">99</span><span class="period">/mo</span></div>
+            <ul>
+              <li>✔ 25,000 contacts</li>
+              <li>✔ Email + Social + On-site</li>
+              <li>✔ Unlimited integrations</li>
+              <li>✔ Advanced AI optimization</li>
+              <li>✔ A/B/n + Lift analysis</li>
+            </ul>
+            <div style="margin-top:16px"><a href="#cta" class="btn glow" style="width:100%; display:block; text-align:center">Try Growth</a></div>
+          </div>
+        </div>
+        <div class="price" data-animate>
+          <div class="hdr">
+            <strong>Scale</strong>
+            <span class="tag">Enterprise</span>
+          </div>
+          <div class="body">
+            <div class="money"><span class="currency">$</span><span class="amount" data-month="299" data-year="239">299</span><span class="period">/mo</span></div>
+            <ul>
+              <li>✔ 250,000 contacts</li>
+              <li>✔ All channels + API</li>
+              <li>✔ Dedicated SSO + SAML</li>
+              <li>✔ Private training</li>
+              <li>✔ 99.99% SLA</li>
+            </ul>
+            <div style="margin-top:16px"><a href="#cta" class="btn glow" style="width:100%; display:block; text-align:center">Talk to sales</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section id="testimonials">
+    <div class="wrap">
+      <h2 class="section-title" data-animate>Loved by teams who love revenue</h2>
+      <p class="section-sub" data-animate>Ranj fit right in—and then it just took off.</p>
+      <div class="carousel">
+        <div class="row">
+          <div class="t-card">
+            <div class="t-head">
+              <div class="avatar" style="background:linear-gradient(135deg,#6ee7b7,#3b82f6)"></div>
+              <div><strong>Amara L.</strong><div class="role">Head of Growth, Lumos</div></div>
+            </div>
+            <div class="quote">We plugged in Ranj on Tuesday and by Friday our demo bookings were up 42%. It’s like adding a top growth PM without the headcount.</div>
+          </div>
+          <div class="t-card">
+            <div class="t-head">
+              <div class="avatar" style="background:linear-gradient(135deg,#f472b6,#f59e0b)"></div>
+              <div><strong>Jonah P.</strong><div class="role">Founder, Nova Labs</div></div>
+            </div>
+            <div class="quote">The predictive segments are unreal. We stopped shouting into the void and started closing.</div>
+          </div>
+          <div class="t-card">
+            <div class="t-head">
+              <div class="avatar" style="background:linear-gradient(135deg,#a78bfa,#22d3ee)"></div>
+              <div><strong>Carolina M.</strong><div class="role">CMO, Orbit</div></div>
+            </div>
+            <div class="quote">Ranj paid for itself in Week 1. The exec team thinks I’m a wizard.</div>
+          </div>
+          <div class="t-card">
+            <div class="t-head">
+              <div class="avatar" style="background:linear-gradient(135deg,#fb7185,#60a5fa)"></div>
+              <div><strong>Sameer K.</strong><div class="role">VP Sales, Centaur</div></div>
+            </div>
+            <div class="quote">We launched three flows in an afternoon. Pipeline velocity jumped immediately.</div>
+          </div>
+          <div class="t-card">
+            <div class="t-head">
+              <div class="avatar" style="background:linear-gradient(135deg,#34d399,#ef4444)"></div>
+              <div><strong>Zoë D.</strong><div class="role">Growth Lead, Prism</div></div>
+            </div>
+            <div class="quote">The UI is a dream and the results are even better.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <div class="wrap">
+      <h2 class="section-title" data-animate>Questions, answered</h2>
+      <div class="faq">
+        <details open>
+          <summary>What exactly is Ranj?</summary>
+          <p>Ranj is an AI growth engine. It finds high-intent prospects, launches multi-channel flows, and optimizes your conversion—on autopilot.</p>
+        </details>
+        <details>
+          <summary>Will it work with my stack?</summary>
+          <p>Yes. We plug into major CRMs, ESPs, storefronts, ad networks and analytics. There’s also a robust REST + Webhooks API.</p>
+        </details>
+        <details>
+          <summary>How fast can we get value?</summary>
+          <p>Most teams connect and launch within a day; measurable lift typically shows up within the first week.</p>
+        </details>
+        <details>
+          <summary>Is my data safe?</summary>
+          <p>Absolutely. SOC2 controls, row‑level permissions, regional data residency, and privacy-by-default design.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section id="cta">
+    <div class="wrap">
+      <div class="final-cta" data-animate>
+        <div class="bg"></div>
+        <h2 class="section-title">Ready to run with Ranj?</h2>
+        <p class="cta-big">Start free today. No credit card. Cancel anytime.</p>
+        <div style="display:flex; gap:12px; justify-content:center; margin-top:16px">
+          <a href="#pricing" class="btn glow">Get started</a>
+          <a href="#how" class="btn secondary">Watch demo</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer style="padding:40px 0; border-top:1px solid var(--stroke); background:rgba(255,255,255,.02)">
+    <div class="wrap" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap">
+      <div class="logo" style="opacity:.9">
+        <div class="logo-badge">R</div>
+        <div><span class="gradient">Ranj</span></div>
+      </div>
+      <div style="color:#aeb8d6; font-size:13px">
+        © <span id="year"></span> Ranj, Inc. All rights reserved.
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Utility: clamp
+    const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
+
+    let ticking=false;
+
+    // Nav shrink on scroll
+    const nav=document.getElementById('nav');
+    let lastY=0;
+    const onScroll=()=>{
+      const y=window.scrollY||window.pageYOffset;
+      if(y>18){nav.classList.add('shrink')} else {nav.classList.remove('shrink')}
+      lastY=y;
+      scheduleParallax();
+    };
+    window.addEventListener('scroll', onScroll, {passive:true});
+    onScroll();
+
+    // Intersection reveal
+    const io=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          e.target.classList.add('in');
+          if(e.target.dataset.countup!==undefined){ startCount(e.target) }
+          // Animate cards inside grid
+          if(e.target.classList.contains('card')){
+            // stagger for siblings
+            const parent=e.target.parentElement;
+            [...parent.children].forEach((child,i)=>{
+              setTimeout(()=>child.classList.add('in'), i*80);
+            });
+          }
+          io.unobserve(e.target);
+        }
+      })
+    },{threshold:.18});
+    document.querySelectorAll('[data-animate], .card').forEach(el=>io.observe(el));
+
+    // Count up
+    function startCount(node){
+      const target=+node.dataset.countup || 0;
+      let suffix=node.textContent.replace(/[0-9.]/g,''); // keep existing suffix like % or x
+      if(!suffix) suffix='';
+      let startVal=0, dur=1400, start=null;
+      function step(ts){
+        if(!start) start=ts;
+        const p=clamp((ts-start)/dur,0,1);
+        const val = Math.floor(p*target);
+        node.textContent = (val.toLocaleString()) + suffix;
+        if(p<1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    // Billing toggle
+    const sw=document.getElementById('billSwitch');
+    function setBilling(yearly){
+      sw.classList.toggle('active', yearly);
+      sw.setAttribute('aria-checked', yearly ? 'true':'false');
+      document.querySelectorAll('.amount').forEach(el=>{
+        const m=el.dataset.month, y=el.dataset.year;
+        el.textContent = (yearly ? y : m);
+      });
+      document.querySelectorAll('.period').forEach(el=> el.textContent = '/mo');
+    }
+    sw.addEventListener('click',()=>setBilling(!sw.classList.contains('active')));
+    sw.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault(); sw.click();}});
+    setBilling(false);
+
+    // Tilt effect
+    const tilt=document.getElementById('tilt');
+    if(tilt){
+      const bounds=()=>tilt.getBoundingClientRect();
+      tilt.addEventListener('mousemove', (e)=>{
+        const b=bounds();
+        const px=(e.clientX - b.left)/b.width, py=(e.clientY - b.top)/b.height;
+        const rx = (py-.5)*10, ry=-(px-.5)*12;
+        tilt.style.transform=`rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0)`;
+      });
+      tilt.addEventListener('mouseleave',()=> tilt.style.transform='rotateX(0deg) rotateY(0deg) translateZ(0)');
+    }
+
+    // Parallax elements
+    const parallaxEls=[...document.querySelectorAll('[data-parallax]')];
+    function doParallax(){
+      const y=window.scrollY||window.pageYOffset;
+      parallaxEls.forEach(el=>{
+        const speed=parseFloat(el.dataset.parallax)||0.1;
+        el.style.transform=`translate3d(0, ${y*speed}px, 0)`;
+      });
+      ticking=false;
+    }
+    function scheduleParallax(){
+      if(!ticking){ requestAnimationFrame(doParallax); ticking=true;}
+    }
+    scheduleParallax();
+
+    // Stop marquee on hover for accessibility (already done via CSS); duplicate track if needed
+    // Year
+    document.getElementById('year').textContent=new Date().getFullYear();
+  </script>
+</body>
+</html>
